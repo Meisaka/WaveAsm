@@ -1,0 +1,252 @@
+# Comment
+<HEAD>
+ISN:"RC3200"
+ISD:"RC3200 CPU Instruction set from doc 0.5a"
+# endian-ness LE (little endian), BE (big endian), NE (endianless i.e. DCPU)
+CPUE:LE
+# memory word size
+CPUM:8
+# cpu word size
+CPUW:32
+# file endian-ness, LE or BE only
+FILEE:LE
+# file word size
+FILEW:8
+</HEAD>
+<REG>
+# attribs set Index 32 bit,Data 32 bit,ecode Length 5 (bits),Name"R"
+# name defines which encoding to use, must be unique
++I32,D32,L5,N"R"
+# name[,alias]:<encoding>
+# # dec, compacted into minimum bits (using current alignment)
+# 0x# hex, each nibble adds 4 bits
+# %# bin, each bit is a bit
+r0:%00000
+r1:%00001
+r2:%00010
+r3:%00011
+r4:%00100
+r5:%00101
+r6:%00110
+r7:%00111
+r8:%01000
+r9:%01001
+r10:%01010
+r11:%01011
+r12:%01100
+r13:%01101
+r14,bp:%01110
+r15,sp:%01111
+r16:%10000
+r17:%10001
+r18:%10010
+r19:%10011
+r20:%10100
+r21:%10101
+r22:%10110
+r23:%10111
+r24:%11000
+r25:%11001
+r26:%11010
+r27:%11011
+r28:%11100
+r29:%11101
+r30:%11110
+r31:%11111
+# attrib set Special 32 bit, encode Length 5 bits
+# Special reserves the names, they may or may not have encodings
++S32,L5
+flags
+y
+ia
+pc
+</REG>
+<LIT>
+# set Name"NAME", Length 5 bits
++N"L",L5
+# <num>[,<rangeend>]:<encoding>[:<extended encoding>]
+  # Encoding can be number, range or special
+	# * first match any number
+# * encode number verbatum
+-15,15:*
+# special encoding
+# encode all numbers as 0x10, +A append L32 bits, * encode in that
+*:%10000:+AL32*
++N"L2",L10 FR
+-511,511:*
+*:%10+0x00:+AL32*
++N"L3",L15 FR
+-16383,16383:*
+*:%100+0x000:+AL32*
+</LIT>
+<OPCODE>
+# "NAME":params[,params...]:"paramformat":encoding
+# \# is param referance
+# numbers always use minimum bits (1 being lowest)
+# binary numbers %... are always exactly as specified
+# param format contains names (above) and is referenced by order in encoding
+# reverse format "L+R,R" is also excepted
+
+# Memory Opcodes and aliases
+# There are no opcodes persey without a literal, so a literal of zero is implied for convience
+LOAD:3:"R+R,R":L32 0xD000+%0+\1+\2+\3
+LOAD:2:"R,R":L32 0xD000+%1+\1+%00000+\2
+LOAD:3:"R+L,R":L32 0xD000+%1+\1+\2+\3
+LOAD.W:3:"R+R,R":L32 FL 0xD001+%0+\1+\2+\3
+LOAD.W:2:"R,R":L32 FL 0xD001+%1+\1+%00000+\2
+LOAD.W:3:"R+L,R":L32 FL 0xD001+%1+\1+\2+\3
+LOAD.B:3:"R+R,R":L32 FL 0xD002+%0+\1+\2+\3
+LOAD.B:2:"R,R":L32 FL 0xD002+%1+\1+%00000+\2
+LOAD.B:3:"R+L,R":L32 FL 0xD002+%1+\1+\2+\3
+LOAD:2:"L2,R":L32 0x9000+%1+\1+\2
+LOAD.W:2:"L2,R":L32 0x9001+%1+\1+\2
+LOAD.B:2:"L2,R":L32 0x9002+%1+\1+\2
+# alt form for load: some people* like using the asm indirect []
+# these make it legal alternate syntax
+LOAD:3:"[R+R],R":L32 0xD000+%0+\1+\2+\3
+LOAD:2:"[R],R":L32 0xD000+%1+\1+%00000+\2
+LOAD:3:"[R+L],R":L32 0xD000+%1+\1+\2+\3
+LOAD.W:3:"[R+R],R":L32 FL 0xD001+%0+\1+\2+\3
+LOAD.W:2:"[R],R":L32 FL 0xD001+%1+\1+%00000+\2
+LOAD.W:3:"[R+L],R":L32 FL 0xD001+%1+\1+\2+\3
+LOAD.B:3:"[R+R],R":L32 FL 0xD002+%0+\1+\2+\3
+LOAD.B:2:"[R],R":L32 FL 0xD002+%1+\1+%00000+\2
+LOAD.B:3:"[R+L],R":L32 FL 0xD002+%1+\1+\2+\3
+LOAD:2:"[L2],R":L32 0x9000+%1+\1+\2
+LOAD.W:2:"[L2],R":L32 0x9001+%1+\1+\2
+LOAD.B:2:"[L2],R":L32 0x9002+%1+\1+\2
+# Store
+STORE:3:"R+R,R":L32 0xD003+%0+\1+\2+\3
+STORE:2:"R,R":L32 0xD003+%1+\1+%00000+\2
+# backwards forms
+#STORE:2:"R,[R]":L32 0xD003+%1+\2+%00000+\1
+STORE:3:"R+L,R":L32 0xD003+%1+\1+\2+\3
+STORE.W:3:"R+R,R":L32 FL 0xD004+%0+\1+\2+\3
+STORE.W:2:"R,R":L32 FL 0xD004+%1+\1+%00000+\2
+#STORE.W:2:"R,[R]":L32 FL 0xD004+%1+\2+%00000+\1
+STORE.W:3:"R+L,R":L32 FL 0xD004+%1+\1+\2+\3
+STORE.B:3:"R+R,R":L32 FL 0xD005+%0+\1+\2+\3
+STORE.B:2:"R,R":L32 FL 0xD005+%1+\1+%00000+\2
+#STORE.B:2:"R,[R]":L32 FL 0xD005+%1+\2+%00000+\1
+STORE.B:3:"R+L,R":L32 FL 0xD005+%1+\1+\2+\3
+STORE:2:"L2,R":L32 0x9003+%1+\1+\2
+STORE.W:2:"L2,R":L32 0x9004+%1+\1+\2
+STORE.B:2:"L2,R":L32 0x9005+%1+\1+\2
+#STORE:2:"R,[L2]":L32 0x9003+%1+\2+\1
+#STORE.W:2:"R,[L2]":L32 0x9004+%1+\2+\1
+#STORE.B:2:"R,[L2]":L32 0x9005+%1+\2+\1
+# Alt form
+STORE:3:"[R+R],R":L32 0xD003+%0+\1+\2+\3
+STORE:2:"[R],R":L32 0xD003+%1+\1+%00000+\2
+STORE:3:"[R+L],R":L32 0xD003+%1+\1+\2+\3
+STORE.W:3:"[R+R],R":L32 FL 0xD004+%0+\1+\2+\3
+STORE.W:2:"[R],R":L32 FL 0xD004+%1+\1+%00000+\2
+STORE.W:3:"[R+L],R":L32 FL 0xD004+%1+\1+\2+\3
+STORE.B:3:"[R+R],R":L32 FL 0xD005+%0+\1+\2+\3
+STORE.B:2:"[R],R":L32 FL 0xD005+%1+\1+%00000+\2
+STORE.B:3:"[R+L],R":L32 FL 0xD005+%1+\1+\2+\3
+STORE:2:"[L2],R":L32 0x9003+%1+\1+\2
+STORE.W:2:"[L2],R":L32 0x9004+%1+\1+\2
+STORE.B:2:"[L2],R":L32 0x9005+%1+\1+\2
+# class 3 opcodes
+ADD:3:"R,R,R":L32 0xC000+%0+\1+\2+\3
+ADD:3:"R,L,R":L32 0xC000+%1+\1+\2+\3
+SUB:3:"R,R,R":L32 0xC001+%0+\1+\2+\3
+SUB:3:"R,L,R":L32 0xC001+%1+\1+\2+\3
+ADDC:3:"R,R,R":L32 0xC002+%0+\1+\2+\3
+ADDC:3:"R,L,R":L32 0xC002+%1+\1+\2+\3
+SUBC:3:"R,R,R":L32 0xC003+%0+\1+\2+\3
+SUBC:3:"R,L,R":L32 0xC003+%1+\1+\2+\3
+AND:3:"R,R,R":L32 0xC004+%0+\1+\2+\3
+AND:3:"R,L,R":L32 0xC004+%1+\1+\2+\3
+OR:3:"R,R,R":L32 0xC005+%0+\1+\2+\3
+OR:3:"R,L,R":L32 0xC005+%1+\1+\2+\3
+XOR:3:"R,R,R":L32 0xC006+%0+\1+\2+\3
+XOR:3:"R,L,R":L32 0xC006+%1+\1+\2+\3
+NAND:3:"R,R,R":L32 0xC007+%0+\1+\2+\3
+NAND:3:"R,L,R":L32 0xC007+%1+\1+\2+\3
+SLL:3:"R,R,R":L32 0xC008+%0+\1+\2+\3
+SLL:3:"R,L,R":L32 0xC008+%1+\1+\2+\3
+SRL:3:"R,R,R":L32 0xC009+%0+\1+\2+\3
+SRL:3:"R,L,R":L32 0xC009+%1+\1+\2+\3
+SRA:3:"R,R,R":L32 0xC00A+%0+\1+\2+\3
+SRA:3:"R,L,R":L32 0xC00A+%1+\1+\2+\3
+ROTL:3:"R,R,R":L32 0xC00B+%0+\1+\2+\3
+ROTL:3:"R,L,R":L32 0xC00B+%1+\1+\2+\3
+ROTR:3:"R,R,R":L32 0xC00C+%0+\1+\2+\3
+ROTR:3:"R,L,R":L32 0xC00C+%1+\1+\2+\3
+UMUL:3:"R,R,R":L32 0xC00D+%0+\1+\2+\3
+UMUL:3:"R,L,R":L32 0xC00D+%1+\1+\2+\3
+UDIV:3:"R,R,R":L32 0xC00E+%0+\1+\2+\3
+UDIV:3:"R,L,R":L32 0xC00E+%1+\1+\2+\3
+MUL:3:"R,R,R":L32 0xC00F+%0+\1+\2+\3
+MUL:3:"R,L,R":L32 0xC00F+%1+\1+\2+\3
+DIV:3:"R,R,R":L32 0xC010+%0+\1+\2+\3
+DIV:3:"R,L,R":L32 0xC010+%1+\1+\2+\3
+# class 2 opcodes
+CPY:2:"R,R":L32 0x8000+%000000+\1+\2
+SET:2:"L2,R":L32 0x8000+%1+\1+\2
+SWP:2:"R,R":L32 0x8001+%000000+\1+\2
+BEQ:2:"R,R":L32 0xA000+%000000+\1+\2
+BEQ:2:"L2,R":L32 0xA000+%1+\1+\2
+BNEQ:2:"R,R":L32 0xA001+%000000+\1+\2
+BNEQ:2:"L2,R":L32 0xA001+%1+\1+\2
+BG:2:"R,R":L32 0xA002+%000000+\1+\2
+BG:2:"L2,R":L32 0xA002+%1+\1+\2
+BUG:2:"R,R":L32 0xA003+%000000+\1+\2
+BUG:2:"L2,R":L32 0xA003+%1+\1+\2
+BGE:2:"R,R":L32 0xA004+%000000+\1+\2
+BGE:2:"L2,R":L32 0xA004+%1+\1+\2
+BUGE:2:"R,R":L32 0xA005+%000000+\1+\2
+BUGE:2:"L2,R":L32 0xA005+%1+\1+\2
+BL:2:"R,R":L32 0xA006+%000000+\1+\2
+BL:2:"L2,R":L32 0xA006+%1+\1+\2
+BUL:2:"R,R":L32 0xA007+%000000+\1+\2
+BUL:2:"L2,R":L32 0xA007+%1+\1+\2
+BLE:2:"R,R":L32 0xA008+%000000+\1+\2
+BLE:2:"L2,R":L32 0xA008+%1+\1+\2
+BULE:2:"R,R":L32 0xA009+%000000+\1+\2
+BULE:2:"L2,R":L32 0xA009+%1+\1+\2
+BBITS:2:"R,R":L32 0xA00A+%000000+\1+\2
+BBITS:2:"L2,R":L32 0xA00A+%1+\1+\2
+BCLEAR:2:"R,R":L32 0xA00B+%000000+\1+\2
+BCLEAR:2:"L2,R":L32 0xA00B+%1+\1+\2
+JMP:2:"R,R":L32 0xB001+%000000+\1+\2
+JMP:2:"L2,R":L32 0xB001+%1+\1+\2
+CALL:2:"R,R":L32 0xB002+%000000+\1+\2
+CALL:2:"L2,R":L32 0xB002+%1+\1+\2
+# class 1 opcodes
+NOT:1:"R":L32 0x400000+%000+\1
+NEG:1:"R":L32 0x400100+%000+\1
+XCHG:1:"R":L32 0x400200+%000+\1
+XCHG.W:1:"R":L32 0x400300+%000+\1
+SXTBD:1:"R":L32 0x400400+%000+\1
+SXTWD:1:"R":L32 0x400500+%000+\1
+GETPC:1:"R":L32 0x400800+%000+\1
+SETFLAGS:1:"R":L32 0x400900+%000+\1
+SETFLAGS:1:"L3":L32 0x4009+%1+\1
+GETFLAGS:1:"R":L32 0x400A00+%000+\1
+SETY:1:"R":L32 0x400B00+%000+\1
+SETY:1:"L3":L32 0x400B+%1+\1
+GETY:1:"R":L32 0x400C00+%000+\1
+SETIA:1:"R":L32 0x400D00+%000+\1
+SETIA:1:"L3":L32 0x400D+%1+\1
+GETIA:1:"R":L32 0x400E00+%000+\1
+PUSH:1:"R":L32 0x500600+%000+\1
+PUSH:1:"L3":L32 0x5006+%1+\1
+POP:1:"R":L32 0x500700+%000+\1
+INT:1:"R":L32 0x700000+%000+\1
+INT:1:"L3":L32 0x7000+%1+\1
+JMP:1:"R":L32 0x700100+%000+\1
+JMP:1:"L3":L32 0x7001+%1+\1
+CALL:1:"R":L32 0x700200+%000+\1
+CALL:1:"L3":L32 0x7002+%1+\1
+# class 0 opcodes
+NOP:0::L32 0x00000000
+SLEEP:0::L32 0x00000001
+RFI:0::L32 0x30000003
+RET:0::L32 0x30000004
+BOVF:0::L32 0x20000000
+BOCF:0::L32 0x20000001
+</OPCODE>
+
