@@ -18,6 +18,9 @@ my %symtable;
 my @allfile;
 my $vpc = 0;
 my $errors = 0;
+# CPU specs (these are replaced in loaded file)
+my %cputable = (ISN => "NONE", FILEW => 8, CPUW => 8, CPUM => 8, CPUE => "LE", FILEE => "LE");
+
 # build-in instructions
 my @optable = (
 	{op => '.ORG', arc => 1, arf => '*', encode => 'M'},
@@ -25,15 +28,15 @@ my @optable = (
 	{op => '.DAT', arc => -1, arf => '*', encode => 'M'}
 );
 
-print "Wave Asm - version 0.0.0\n";
+print STDERR "Wave Asm - version 0.0.0\n";
 LoadInstructions( $instructionsetfile );
-print "<optable>\n";
+print STDERR "<optable>\n";
 foreach my $o (@optable) {
-	print $o->{op} . " ";
+	print STDERR $o->{op} . " ";
 }
-print "<regtable>\n";
+print STDERR "<regtable>\n";
 foreach my $o (@regtable) {
-	print "$o->{reg} $o->{nam} $o->{encode} \n";
+	print STDERR "$o->{reg} $o->{nam} $o->{encode} \n";
 }
 foreach(@ARGV) {
 	if(/^--/) {
@@ -60,7 +63,7 @@ sub LoadInstructions {
 		} elsif(/<REG>/ .. /<\/REG>/) {
 			if(/^\W*#/ or /\</) {
 			} elsif(/^\+/) {
-				print "AttribSet: $_\n";
+				print STDERR "AttribSet: $_\n";
 				s/^\+//;
 				%att = ();
 				@attribs = split(',', $_);
@@ -73,7 +76,7 @@ sub LoadInstructions {
 				@creg = split(':', $_);
 				@mcr = split(',', ($creg[0]));
 				foreach(@mcr) {
-					print "REG: $_ " . $creg[1]  . "\n";
+					print STDERR "REG: $_ " . $creg[1]  . "\n";
 					push @regtable, ({reg => $_, nam => $att{nam}, encode => $creg[1]});
 				}
 			}
@@ -81,7 +84,7 @@ sub LoadInstructions {
 			if(/^\W*#/ or /\</) {
 				next;
 			} elsif(/^\+/) {
-				print "AttribSet: $_\n";
+				print STDERR "AttribSet: $_\n";
 				s/^\+//;
 				%att = ();
 				@attribs = split(',', $_);
@@ -92,7 +95,7 @@ sub LoadInstructions {
 						$att{len} = $1;
 					}
 				}
-				print "+NAME=$att{nam} +LEN=$att{len}\n";
+				print STDERR "+NAME=$att{nam} +LEN=$att{len}\n";
 			} else {
 				my ($range, @encode) = split(':', $_);
 				my ($rl,$ru) = split(',', $range);
@@ -100,7 +103,7 @@ sub LoadInstructions {
 				for my $i (@encode) {
 					$i = "L$att{len}*" if($i eq '*');
 				}
-				print "LIT: $att{nam} $range $att{len} " . join(':',@encode) . "\n";
+				print STDERR "LIT: $att{nam} $range $att{len} " . join(':',@encode) . "\n";
 				push @littable, ({rl => $rl, ru => $ru, nam => $att{nam}, encode => join(':',@encode)});
 
 			}
@@ -113,11 +116,11 @@ sub LoadInstructions {
 				$opname =~ s/"//g;
 				my $fcode = $opparam[2];
 				$fcode =~ s/"([^"]+)"/\1/;
-				print "OPCODE: $opname $fcode\n";
+				print STDERR "OPCODE: $opname $fcode\n";
 				push @optable, {op => $opname, arc => $opparam[1], arf => $fcode, encode => $opparam[3]};
 			}
 		} elsif(/^[\t ]*#/) {
-			print $_;
+			print STDERR $_;
 		}
 	}
 	close ISF;
@@ -140,19 +143,20 @@ sub DecodeSymbol {
 			for my $l (@littable) {
 				if($ci >= $itr) {
 					if($l->{rl} eq '*') {
-						return ("lit", $l, $itab);
+						return ("lit", $l, $itab, $r->{val});
 					}
 				} else {
 					$ci++;
 				}
 			}
 		} else {
+			$v = $r->{val};
 			for my $l (@littable) {
 				if($ci >= $itr) {
 					if($l->{rl} eq '*') {
-						return ("lit", $l, $itab);
-					} elsif(($l->{rl} <= $v) && ($l->{rh} >= $v)) {
-						return ("lit", $l, $itab);
+						return ("lit", $l, $itab, $v);
+					} elsif(($l->{rl} <= $v) && ($l->{ru} >= $v)) {
+						return ("lit", $l, $itab, $v);
 					}
 				} else {
 					$ci++;
@@ -161,13 +165,14 @@ sub DecodeSymbol {
 		}
 	}
 	if($sym =~ /^(-*)([0-9]+)$/) {
-		$v = oct($2);
+		$v = ($2);
 		$v = -$v if(length($1) % 2 == 1);
 		for my $r (@littable) {
+			print STDERR "LL: $v $r->{rl} $r->{ru}\n";
 			if($r->{rl} eq '*') {
-				return ("lit", $r, $itab);
-			} elsif(($r->{rl} <= $v) && ($r->{rh} >= $v)) {
-				return ("lit", $r, $itab);
+				return ("lit", $r, $itab, $v);
+			} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
+				return ("lit", $r, $itab, $v);
 			}
 		}
 	}
@@ -205,26 +210,26 @@ sub DecodeSymbols {
 				$minus = "-";
 				push @lfs, "+";
 			} elsif($elem =~ /^-*[0-9]+$/) {
-				my ($type, $vec) = DecodeSymbol($minus . $elem);
+				my ($type, $vec, $i, $v) = DecodeSymbol($minus . $elem);
 				if($type eq "reg") {
 					push @lfs, $vec->{nam};
 					push @encode, $vec->{encode};
 				} elsif($type eq "lit") {
 					push @lfs, $vec->{nam};
-					push @encode, $vec->{encode};
+					push @encode, $vec->{encode} ."+$v";
 				} else {
-					push @lfs, "#";
-					push @encode, "*";
+					push @lfs, "*";
+					push @encode, "+$v";
 				}
 				$minus = "";
 			} else {
-				my ($type, $vec, $i) = DecodeSymbol($minus . $elem, $itr);
+				my ($type, $vec, $i, $v) = DecodeSymbol($minus . $elem, $itr);
 				if($type eq "reg") {
 					push @lfs, $vec->{nam};
 					push @encode, $vec->{encode};
 				} elsif($type eq "lit") {
 					push @lfs, $vec->{nam};
-					push @encode, $vec->{encode};
+					push @encode, $vec->{encode}. "+$v";
 					$maxitr = $i;
 				}
 				$minus = "";
@@ -237,16 +242,65 @@ sub DecodeSymbols {
 	return ($format,$maxitr,@encode);
 }
 
+sub RunEncoder {
+	my ($instruct, @extra) = @_;
+	my @output = ();
+	my $output = "";
+	my $otlen = 0;
+	for my $allenc (split(':',$instruct)) {
+		$output = "";
+		$otlen = 0;
+		my @ienc = split(' ', $allenc);
+		foreach my $es (@ienc) {
+			if($es =~ /^L([0-9]+)/) {
+				print STDERR "ENC-STL: $1\n";
+				$otlen = $1;
+			} elsif($es =~ /\+/) {
+				foreach my $k (split('\+', $es)) {
+					next if($k eq "");
+					if($k =~ /^L([0-9]+)/) {
+						print STDERR "ENC-STL: $1\n";
+						$otlen = $1 + 0;
+					} elsif($k =~ /^0x([0-9a-fA-F]+)$/) {
+						my $tl = length($1) * 4;
+						$output .= sprintf("%0${tl}b", oct("0x$1"));
+					} elsif($k =~ /^%([01]+)$/ ) {
+						$output .= $1;
+					} elsif($k =~ /\\([0-9]+)/ ) {
+						my $x = $1 - 1;
+						print STDERR "ENC-Rec: $1 $extra[$x]\n";
+						my ($ins, @apd) = RunEncoder("+".$extra[$x]);
+						$output .= $ins;
+						print STDERR "ENC-Res: $ins " . join('',@apd) . "\n";
+						push @output, @apd;
+					} elsif($k =~ /^(-*[0-9]+)$/) {
+						my $x = $1 + 0;
+						my $o = sprintf("%0${otlen}b",$x);
+						print STDERR "ENC-int: $x\n";
+						$output .= $o;
+					} else {
+						print STDERR "ENC-unk: '$k'\n";
+					}
+				}
+			}
+		}
+		unshift @output,$output;
+	}
+	return @output;
+}
+
 sub Pass2 {
-	print "Pass 2\n";
+	print STDERR "Pass 2\n";
 	my $flagpass = 0;
 	for my $l (@allfile) {
 		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
-		print join("\t",($.,$label,$opname,$linearg)) . "\t" ;
+		print STDERR join("\t",($.,$label,$opname,$linearg)) . "\t" ;
 		if($label ne '') {
-			if($symtable{$label}->{type} eq "ll") {
-				if($symtable{$label}->{val} != $vpc) {
-					$symtable{$label}->{val} = $vpc;
+			print STDERR "SYMGEN: $label ".$symtable{$label}{type}."\n";
+			if($symtable{$label}{type} ne "") {
+				if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
+					$symtable{$label}{val} = $vpc;
+			print STDERR "SYMSET: $label $symtable{$label}{val}\n";
 					$flagpass++;
 				}
 			}
@@ -274,7 +328,7 @@ sub Pass2 {
 				}
 			}
 			$itr++;
-			print "ITR: $itr $found $addrmode\n";
+			print STDERR "ITR: $itr $found $addrmode\n";
 			} while($found != 0 && $itr < $maxitr && $addrmode == 0);
 			if($found == 0) {
 				print STDERR "$langtable{error}: $langtable{line} $l->{lnum}:",
@@ -288,7 +342,8 @@ sub Pass2 {
 				}
 			}
 			$encode = join('||',@encode);
-			print "$format \"$encode\" $enc\n";
+			print STDERR "$format \"$encode\" $enc\n";
+			print join('',RunEncoder($enc, @encode)) . "\n";
 		}
 		#print "\n";
 	}
@@ -359,8 +414,8 @@ sub Assemble {
 			}
 		}
 		push @allfile, {lnum => $., ltxt => $_, label => $label, op => $opname, arg => $linearg};
-		print join(':',($.,$label,$opname,$linearg,$enc)) ;
-		print "\n";
+		print STDERR join("\t",($.,$label,$opname,$linearg,$enc)) ;
+		print STDERR "\n";
 	}
 	$vpc = 0;
 	$errors = 0;
