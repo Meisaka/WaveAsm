@@ -7,12 +7,17 @@ my $instructionsetfile = "rc3200.isf";
 my %langtable = ( fileof1 => "Failed to open file: ", fileof2 => "",
 	error => "Error", line => "Line",
 	opunkn => "No such opcode.",
-	addrunkn => "Invalid addressing mode."
+	addrunkn => "Invalid addressing mode.",
+	unmatchlb => "found '[', expected ']' not found",
+	unmatchrb => "']' without previous '['",
+	duplabel => "Duplicate label on line"
 );
 my @regtable = ( {reg => '*', nam => 'intern'} );
 my @littable = ( );
-my @symtable;
+my %symtable;
 my @allfile;
+my $vpc = 0;
+my $errors = 0;
 # build-in instructions
 my @optable = (
 	{op => '.ORG', arc => 1, arf => '*', encode => 'M'},
@@ -20,6 +25,7 @@ my @optable = (
 	{op => '.DAT', arc => -1, arf => '*', encode => 'M'}
 );
 
+print "Wave Asm - version 0.0.0\n";
 LoadInstructions( $instructionsetfile );
 print "<optable>\n";
 foreach my $o (@optable) {
@@ -34,7 +40,7 @@ foreach(@ARGV) {
 	} elsif (/^-/) {
 	} else {
 		@allfile = (); # clear file
-		@symtable = ();
+		%symtable = ();
 		Assemble( $_, ($_ . ".lst") );
 	}
 }
@@ -121,38 +127,37 @@ sub DecodeSymbol {
 	return ("null", undef) if(!defined($sym));
 	return ("null", undef) if($sym eq "");
 	my $v;
+	my $itab = @littable;
 	my $ci = 0;
 	for my $r (@regtable) {
 		if($r->{reg} eq $sym) {
 			return ("reg", $r);
 		}
 	}
-	for my $r (@symtable) {
-		if($r->{sym} eq $sym) {
-			if($r->{val} eq '*') {
-				for my $l (@littable) {
-					if($ci >= $itr) {
+	my $r = $symtable{$sym};
+	if($r->{val} ne '') {
+		if($r->{val} eq '*') {
+			for my $l (@littable) {
+				if($ci >= $itr) {
 					if($l->{rl} eq '*') {
-						return ("lit", $l);
+						return ("lit", $l, $itab);
 					}
-					} else {
-						$ci++;
-					}
-				}
-			} else {
-				for my $l (@littable) {
-					if($ci >= $itr) {
-					if($l->{rl} eq '*') {
-						return ("lit", $l);
-					} elsif(($l->{rl} <= $v) && ($l->{rh} >= $v)) {
-						return ("lit", $l);
-					}
-					} else {
-						$ci++;
-					}
+				} else {
+					$ci++;
 				}
 			}
-			last;
+		} else {
+			for my $l (@littable) {
+				if($ci >= $itr) {
+					if($l->{rl} eq '*') {
+						return ("lit", $l, $itab);
+					} elsif(($l->{rl} <= $v) && ($l->{rh} >= $v)) {
+						return ("lit", $l, $itab);
+					}
+				} else {
+					$ci++;
+				}
+			}
 		}
 	}
 	if($sym =~ /^(-*)([0-9]+)$/) {
@@ -160,9 +165,9 @@ sub DecodeSymbol {
 		$v = -$v if(length($1) % 2 == 1);
 		for my $r (@littable) {
 			if($r->{rl} eq '*') {
-				return ("lit", $r);
+				return ("lit", $r, $itab);
 			} elsif(($r->{rl} <= $v) && ($r->{rh} >= $v)) {
-				return ("lit", $r);
+				return ("lit", $r, $itab);
 			}
 		}
 	}
@@ -173,7 +178,9 @@ sub DecodeSymbols {
 	my ($allsym, $itr) = @_;
 	my $format;
 	my @format = ();
+	my $maxitr = 0;
 	my @decarg = split(",",$allsym);
+	my @encode = ();
 	for my $arg (@decarg) {
 		print STDERR "DECARG: '$arg'\n";
 		my @lfs = ();
@@ -201,21 +208,25 @@ sub DecodeSymbols {
 				my ($type, $vec) = DecodeSymbol($minus . $elem);
 				if($type eq "reg") {
 					push @lfs, $vec->{nam};
+					push @encode, $vec->{encode};
 				} elsif($type eq "lit") {
 					push @lfs, $vec->{nam};
+					push @encode, $vec->{encode};
 				} else {
 					push @lfs, "#";
+					push @encode, "*";
 				}
 				$minus = "";
 			} else {
-				my ($type, $vec) = DecodeSymbol($minus . $elem, $itr);
+				my ($type, $vec, $i) = DecodeSymbol($minus . $elem, $itr);
 				if($type eq "reg") {
 					push @lfs, $vec->{nam};
-				print "REG=$vec->{reg},";
+					push @encode, $vec->{encode};
 				} elsif($type eq "lit") {
 					push @lfs, $vec->{nam};
+					push @encode, $vec->{encode};
+					$maxitr = $i;
 				}
-				print "DECSYM=$type\n";
 				$minus = "";
 			}
 		}
@@ -223,45 +234,74 @@ sub DecodeSymbols {
 		push @format, ($format);
 	}
 	$format = join(',',@format);
-	print "FORMAT: $format\n";
-	return ($format,@decarg);
+	return ($format,$maxitr,@encode);
 }
 
 sub Pass2 {
 	print "Pass 2\n";
+	my $flagpass = 0;
 	for my $l (@allfile) {
 		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
+		print join("\t",($.,$label,$opname,$linearg)) . "\t" ;
 		if($label ne '') {
-			$label =~ s/:$//;
+			if($symtable{$label}->{type} eq "ll") {
+				if($symtable{$label}->{val} != $vpc) {
+					$symtable{$label}->{val} = $vpc;
+					$flagpass++;
+				}
+			}
 		}
 		my $enc = undef;
 		if($opname ne '') {
 			my $found = 0;
 			my $addrmode = 0;
 			my $itr = 0;
+			my $format; my $maxitr;
+			my @encode;
+			my $encode;
 			do {
-			my @decsym = DecodeSymbols($linearg, $itr);
+				$found = 0;
+			($format, $maxitr, @encode) = DecodeSymbols($linearg, $itr);
 			foreach my $i ( @optable ) {
 				if(($i->{op}) eq ($opname)) {
 					$enc = $i->{encode};
-					$found = 1;
-					if($i->{arf} eq $decsym[0]) {
+					$addrmode = 1 if($enc eq 'M');
+					$found++;
+					if($i->{arf} eq $format) {
 						$addrmode = 1;
 						last;
 					}
 				}
 			}
 			$itr++;
-			} while($found != 0 && $addrmode == 0);
+			print "ITR: $itr $found $addrmode\n";
+			} while($found != 0 && $itr < $maxitr && $addrmode == 0);
 			if($found == 0) {
-				print STDERR "$langtable{error}: $langtable{line} $l->{lnum}: $opname - $langtable{opunkn}\n$l->{ltxt}\n";
+				print STDERR "$langtable{error}: $langtable{line} $l->{lnum}:",
+				" $opname - $langtable{opunkn}\n$l->{ltxt}\n";
+				$errors++;
 			} else {
-				print STDERR "$langtable{error}: $langtable{line} $l->{lnum}: $opname - $langtable{addrunkn}\n$l->{ltxt}\n" if($addrmode == 0);
+				if($addrmode == 0) {
+					print STDERR "$langtable{error}: $langtable{line} $l->{lnum}:",
+					" $opname - $langtable{addrunkn}\n$l->{ltxt}\n";
+					$errors++;
+				}
 			}
+			$encode = join('||',@encode);
+			print "$format \"$encode\" $enc\n";
 		}
-		#print join(':',($.,$label,$opname,$linearg,$enc)) ;
 		#print "\n";
 	}
+}
+
+sub GetLineNum {
+	my ($ln) = @_;
+	for my $i (@allfile) {
+		if($i->{lnum} == $ln) {
+			return $i;
+		}
+	}
+	return undef;
 }
 
 sub Assemble {
@@ -275,10 +315,11 @@ sub Assemble {
 		close ISF;
 		return;
 	}
+	$errors = 0;
 	while(<ISF>) {
 		# clean up the lines first
+		s/\n//;
 		my $prl = $_;
-		$prl =~ s/\n//;
 		$prl =~ s/;.*$//;
 		#$prl =~ s/^\W*$//;
 		if($prl =~ /^[ \t]*$/) { # blank line
@@ -289,7 +330,18 @@ sub Assemble {
 		$linearg =~ s/\+/ + /g;
 		if($label ne '') {
 			$label =~ s/:$//;
-			push @symtable, { sym => $label, type => "ll", val => "*" };
+			my $slnum;
+			if($symtable{$label} == undef) {
+				$symtable{$label} = { lnum => $., type => "ll", val => "*" };
+			} else {
+				$slnum = GetLineNum($symtable{$label}->{lnum});
+				if($slnum == undef) {
+					print STDERR "$langtable{error}: Internal Error!\n";
+				} else {
+					print STDERR "$langtable{error}: $langtable{line} $.; $slnum->{lnum}: $langtable{duplabel}\n$_\n$slnum->{ltxt}\n";
+					$errors++;
+				}
+			}
 		}
 		my $enc = undef;
 		if($opname ne '') {
@@ -303,11 +355,14 @@ sub Assemble {
 			}
 			if($found == 0) {
 				print STDERR "$langtable{error}: $langtable{line} $.: $opname - $langtable{opunkn}\n$_\n";
+				$errors++;
 			}
 		}
 		push @allfile, {lnum => $., ltxt => $_, label => $label, op => $opname, arg => $linearg};
 		print join(':',($.,$label,$opname,$linearg,$enc)) ;
 		print "\n";
 	}
+	$vpc = 0;
+	$errors = 0;
 	Pass2();
 }
