@@ -17,6 +17,7 @@ my @littable = ( );
 my %symtable;
 my @allfile;
 my $vpc = 0;
+my $vinstrend = 0;
 my $errors = 0;
 my $flagpass = 0;
 # CPU specs (these are replaced in loaded file)
@@ -132,7 +133,7 @@ sub LoadInstructions {
 	close ISF;
 }
 sub DecodeSymbol {
-	my ($sym, $itr) = @_;
+	my ($sym, $itr, $rel) = @_;
 	return ("null", undef) if(!defined($sym));
 	return ("null", undef) if($sym eq "");
 	my $v;
@@ -163,6 +164,7 @@ sub DecodeSymbol {
 			if($itr == -1) {
 				return ("val", undef, 0, $r->{val});
 			}
+			$v -= ($vpc + $vinstrend) if($rel == 1);
 			#printf STDERR "(%04x)",$v;
 			for my $l (@littable) {
 				if($ci >= $itr) {
@@ -183,6 +185,7 @@ sub DecodeSymbol {
 		if($itr == -1) {
 			return ("val", undef, 0, $v);
 		}
+		$v -= ($vpc + $vinstrend) if($rel == 1);
 		for my $r (@littable) {
 			#print STDERR "LL: $v [ $r->{rl} $r->{ru} ] ";
 			if($r->{rl} eq '*') {
@@ -196,6 +199,7 @@ sub DecodeSymbol {
 		if($itr == -1) {
 			return ("val", undef, 0, $v);
 		}
+		$v -= ($vpc + $vinstrend) if($rel == 1);
 		for my $r (@littable) {
 			if($r->{rl} eq '*') {
 				return ("lit", $r, $itab, $v);
@@ -208,12 +212,17 @@ sub DecodeSymbol {
 }
 
 sub DecodeSymbols {
-	my ($allsym, $itr) = @_;
+	my ($allsym, $itr, $arc) = @_;
 	my $format;
 	my @format = ();
 	my $maxitr = 0;
 	my @decarg = split(",",$allsym);
 	my @encode = ();
+	my $userel = 0;
+	my ($iis, $mrel) = split(',',$arc);
+	if($mrel =~ /r/) {
+		$userel = 1;
+	}
 	for my $arg (@decarg) {
 		#print STDERR "DECARG: '$arg' ";
 		my @lfs = ();
@@ -238,7 +247,7 @@ sub DecodeSymbols {
 				$minus = "-";
 				push @lfs, "+";
 			} elsif($elem =~ /^-*[0-9]+$/) {
-				my ($type, $vec, $i, $v) = DecodeSymbol($minus . $elem);
+				my ($type, $vec, $i, $v) = DecodeSymbol($minus . $elem,0,$userel);
 				if($type eq "reg") {
 					push @lfs, $vec->{nam};
 					push @encode, $vec->{encode};
@@ -251,7 +260,7 @@ sub DecodeSymbols {
 				}
 				$minus = "";
 			} else {
-				my ($type, $vec, $i, $v) = DecodeSymbol($minus . $elem, $itr);
+				my ($type, $vec, $i, $v) = DecodeSymbol($minus . $elem, $itr, $userel);
 				if($type eq "reg") {
 					push @lfs, $vec->{nam};
 					push @encode, $vec->{encode};
@@ -301,6 +310,7 @@ sub RunEncoder {
 	my $output = "";
 	my $otlen = 0;
 	my $otapp = 0;
+	my $otrel = 0;
 	for my $allenc (split(':',$instruct)) {
 		$output = "";
 		$otlen = 0;
@@ -309,6 +319,8 @@ sub RunEncoder {
 			if($es =~ /^L([0-9]+)/) {
 				#print STDERR "ENC-STL: $1\n";
 				$otlen = $1;
+			} elsif($es =~ /^MR([BN]*)$/) {
+				$otrel = 1;
 			} elsif($es =~ /\+/) {
 				foreach my $k (split('\+', $es)) {
 					next if($k eq "");
@@ -321,10 +333,13 @@ sub RunEncoder {
 						$otapp = 1;
 					} elsif($k =~ /^0x([0-9a-fA-F]+)$/) {
 						my $tl = length($1) * 4;
+						my $v = oct("0x$1");
+						my $ins = sprintf("%0${tl}b", $v);
+						$ins = substr($ins,-$otlen,$otlen) if($otlen != 0);
 						if($otapp == 0) {
-						$output .= sprintf("%0${tl}b", oct("0x$1"));
+						$output .= $ins;
 						} else {
-						push @output, sprintf("%0${tl}b", oct("0x$1"));
+						push @output, $ins;
 						$otapp = 0;
 						#print STDERR "ENC-ACL\n";
 						}
@@ -352,6 +367,7 @@ sub RunEncoder {
 					} elsif($k =~ /^(-*[0-9]+)$/) {
 						my $x = $1 + 0;
 						my $o = sprintf("%0${otlen}b",$x);
+						$o = substr($o,-$otlen,$otlen) if($otlen != 0);
 						#print STDERR "ENC-int: $x\n";
 						if($otapp == 0) {
 						$output .= $o;
@@ -361,7 +377,7 @@ sub RunEncoder {
 						#print STDERR "ENC-ACL\n";
 						}
 					} elsif($k eq '*') {
-						my $x = sprintf("%0${otlen}b",4);
+						my $x = sprintf("%0${otlen}b",0);
 						#print STDERR "ENC-fpw: $x\n";
 						if($otapp == 0) {
 						$output .= $x;
@@ -385,8 +401,9 @@ sub Pass2 {
 	for my $l (@allfile) {
 		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
 		$opname = uc $opname;
+		$vinstrend = $l->{ilen};
 		print STDERR join("\t",($l->{lnum},sprintf("%08x",$vpc),$label,$opname,$linearg)) . "\t" ;
-		if($label ne '') {
+		if($label ne '' && $opname ne '.EQU') {
 			#print STDERR "SYMGEN: $label ".$symtable{$label}{type}."\n";
 			if($symtable{$label}{type} ne "") {
 				if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
@@ -399,19 +416,23 @@ sub Pass2 {
 		my $enc = undef;
 		my $found = 0;
 		my $addrmode = 0;
+		my $arc;
 		my $itr = 0;
 		my $format; my $maxitr;
 		my @encode;
 		my $encode;
+		my $lformat;
+		my @lencode;
 		if($opname ne '') {
 			do {
 				$found = 0;
-			($format, $maxitr, @encode) = DecodeSymbols($linearg, $itr);
 			foreach my $i ( @optable ) {
 				if(($i->{op}) eq ($opname)) {
 					$enc = $i->{encode};
+					$arc = $i->{arc};
 					$addrmode = 1 if($enc eq 'M');
 					$found++;
+			($format, $maxitr, @encode) = DecodeSymbols($linearg, $itr, $arc);
 					if($i->{arf} eq $format) {
 						$addrmode = 1;
 						last;
@@ -421,6 +442,7 @@ sub Pass2 {
 			$itr++;
 			#print STDERR "ITR: $itr $found $addrmode\n";
 			} while($found != 0 && $itr < $maxitr && $addrmode == 0);
+			$itr--;
 		} else {
 			$found = -1; #no opcode on line
 			$addrmode = -1;
@@ -445,6 +467,7 @@ sub Pass2 {
 					if($symtable{$label}{type} ne "") {
 					if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
 						$symtable{$label}{val} = $vpc;
+						#print STDERR "RRSYM: $vpc\n";
 						$flagpass++;
 					}
 					}
@@ -454,6 +477,7 @@ sub Pass2 {
 					if($type eq "val") {
 					if($label ne '') {
 					if($symtable{$label}{val} != $v) {
+						#print STDERR "RRSYM: $symtable{$label}{val} $v\n";
 						$symtable{$label}{val} = $v;
 						$flagpass++;
 					}
@@ -466,16 +490,34 @@ sub Pass2 {
 			}
 		}
 		if($found >= 1 && $addrmode == 1) {
-			$encode = join('||',@encode);
-			#print STDERR "$format \"$encode\" $enc\n";
-			my @words = RunEncoder($enc, @encode);
+			my @words;
+			@words = RunEncoder($enc, @encode);
 			my ($avl, $dat, @bytes) = BinSplit(@words);
 			$l->{addr} = $vpc;
-			$vpc += ($avl / $cputable{CPUM});
-			my $txtbyte = join('', @bytes);
-			print STDERR $txtbyte . "\n";
-			$l->{byte} = $txtbyte;
-			$l->{dat} = $dat;
+			$vinstrend = ($avl / $cputable{CPUM});
+			$vpc += $vinstrend;
+			$l->{ilen} = $vinstrend;
+			# Reencode for relative jumps
+			($lformat, undef, @lencode) = DecodeSymbols($linearg, $itr, $arc);
+			#$encode = join('||',@encode);
+			#print STDERR "\n$format \"$encode\" $enc";
+			#$encode = join('||',@lencode);
+			#print STDERR "\n$lformat \"$encode\" $enc\n";
+			@words = RunEncoder($enc, @lencode);
+			my ($lavl, $ldat, @lbytes) = BinSplit(@words);
+			if($lavl != $avl) {
+				#print STDERR "AVC: $avl $lavl\n";
+				$flagpass++;
+				my $txtbyte = join('', @lbytes);
+				print STDERR $txtbyte . "\n";
+				$l->{byte} = $txtbyte;
+				$l->{dat} = $ldat;
+			} else {
+				my $txtbyte = join('', @bytes);
+				print STDERR $txtbyte . "\n";
+				$l->{byte} = $txtbyte;
+				$l->{dat} = $dat;
+			}
 		}
 		#print "\n";
 	}
@@ -565,7 +607,7 @@ sub Assemble {
 	$flagpass = 0;
 	print STDERR "Pass $assmpass\n";
 	Pass2();
-	} while(($assmpass++) < 7 && $flagpass == 1);
+	} while(($assmpass++) < 7 && $flagpass >= 1);
 	if($errors == 0) {
 		print STDERR "Complete!\n";
 		foreach my $l (@allfile) {
