@@ -148,7 +148,7 @@ sub DecodeSymbol {
 	if($r->{val} ne '') {
 		if($r->{val} eq '*') {
 			if($itr == -1) {
-				return ("cpc", undef, 0, $r->{val});
+				return ("cpc", undef, $itab, $r->{val});
 			}
 			for my $l (@littable) {
 				if($ci >= $itr) {
@@ -162,7 +162,7 @@ sub DecodeSymbol {
 		} else {
 			$v = $r->{val};
 			if($itr == -1) {
-				return ("val", undef, 0, $r->{val});
+				return ("val", undef, $itab, $r->{val});
 			}
 			$v -= ($vpc + $vinstrend) if($rel == 1);
 			#printf STDERR "(%04x)",$v;
@@ -183,28 +183,36 @@ sub DecodeSymbol {
 		$v = ($2);
 		$v = -$v if(length($1) % 2 == 1);
 		if($itr == -1) {
-			return ("val", undef, 0, $v);
+			return ("val", undef, $itab, $v);
 		}
 		$v -= ($vpc + $vinstrend) if($rel == 1);
 		for my $r (@littable) {
-			#print STDERR "LL: $v [ $r->{rl} $r->{ru} ] ";
-			if($r->{rl} eq '*') {
-				return ("lit", $r, $itab, $v);
-			} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
-				return ("lit", $r, $itab, $v);
+			if($ci >= $itr) {
+				#print STDERR "LL: $v [ $r->{rl} $r->{ru} ] ";
+				if($r->{rl} eq '*') {
+					return ("lit", $r, $itab, $v);
+				} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
+					return ("lit", $r, $itab, $v);
+				}
+			} else {
+				$ci++;
 			}
 		}
 	} elsif($sym =~ /^(0x[0-9a-fA-F]+)$/) {
 		$v = oct($1);
 		if($itr == -1) {
-			return ("val", undef, 0, $v);
+			return ("val", undef, $itab, $v);
 		}
 		$v -= ($vpc + $vinstrend) if($rel == 1);
 		for my $r (@littable) {
-			if($r->{rl} eq '*') {
-				return ("lit", $r, $itab, $v);
-			} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
-				return ("lit", $r, $itab, $v);
+			if($ci >= $itr) {
+				if($r->{rl} eq '*') {
+					return ("lit", $r, $itab, $v);
+				} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
+					return ("lit", $r, $itab, $v);
+				}
+			} else {
+				$ci++;
 			}
 		}
 	}
@@ -247,16 +255,18 @@ sub DecodeSymbols {
 				$minus = "-";
 				push @lfs, "+";
 			} elsif($elem =~ /^-*[0-9]+$/) {
-				my ($type, $vec, $i, $v) = DecodeSymbol($minus . $elem,0,$userel);
+				my ($type, $vec, $i, $v) = DecodeSymbol($minus . $elem, $itr,$userel);
 				if($type eq "reg") {
 					push @lfs, $vec->{nam};
 					push @encode, $vec->{encode};
 				} elsif($type eq "lit") {
 					push @lfs, $vec->{nam};
 					push @encode, $vec->{encode} ."+$v";
+					$maxitr = $i;
 				} else {
 					push @lfs, "*";
 					push @encode, "+$v";
+					$maxitr = $i;
 				}
 				$minus = "";
 			} else {
@@ -432,7 +442,9 @@ sub Pass2 {
 					$arc = $i->{arc};
 					$addrmode = 1 if($enc eq 'M');
 					$found++;
-			($format, $maxitr, @encode) = DecodeSymbols($linearg, $itr, $arc);
+					my $tmxr;
+			($format, $tmxr, @encode) = DecodeSymbols($linearg, $itr, $arc);
+					$maxitr = $tmxr if($tmxr > $maxitr);
 					if($i->{arf} eq $format) {
 						$addrmode = 1;
 						last;
@@ -452,6 +464,7 @@ sub Pass2 {
 			" $opname - $langtable{opunkn}\n$l->{ltxt}\n";
 			$errors++;
 		} else {
+			#print STDERR "INT: $found$addrmode $format\n";
 			if($addrmode == 0) {
 				print STDERR "$langtable{error}: $langtable{line} $l->{lnum}:",
 					" $opname - $langtable{addrunkn}\n$l->{ltxt}\n";
@@ -607,7 +620,7 @@ sub Assemble {
 	$flagpass = 0;
 	print STDERR "Pass $assmpass\n";
 	Pass2();
-	} while(($assmpass++) < 7 && $flagpass >= 1);
+	} while(($assmpass++) < 9 && $flagpass >= 1);
 	if($errors == 0) {
 		print STDERR "Complete!\n";
 		foreach my $l (@allfile) {
