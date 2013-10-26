@@ -140,7 +140,7 @@ sub DecodeSymbol {
 	my $itab = @littable;
 	my $ci = 0;
 	for my $r (@regtable) {
-		if($r->{reg} eq $sym) {
+		if(uc($r->{reg}) eq uc($sym)) {
 			return ("reg", $r);
 		}
 	}
@@ -496,6 +496,8 @@ sub Pass2 {
 					}
 					}
 					}
+
+				} elsif($opname eq '.DAT') {
 
 				}
 
