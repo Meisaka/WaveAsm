@@ -198,8 +198,9 @@ sub DecodeSymbol {
 				$ci++;
 			}
 		}
-	} elsif($sym =~ /^(0x[0-9a-fA-F]+)$/) {
-		$v = oct($1);
+	} elsif($sym =~ /^(-*)(0x[0-9a-fA-F]+)$/) {
+		$v = oct($2);
+		$v = -$v if(length($1) % 2 == 1);
 		if($itr == -1) {
 			return ("val", undef, $itab, $v);
 		}
@@ -263,6 +264,8 @@ sub DecodeSymbols {
 					push @lfs, $vec->{nam};
 					push @encode, $vec->{encode} ."+$v";
 					$maxitr = $i;
+				} elsif($type eq "val") {
+					push @encode, "+ALM+$v";
 				} else {
 					push @lfs, "*";
 					push @encode, "+$v";
@@ -278,6 +281,8 @@ sub DecodeSymbols {
 					push @lfs, $vec->{nam};
 					push @encode, $vec->{encode}. "+$v";
 					$maxitr = $i;
+				} elsif($type eq "val") {
+					push @encode, "+ALM+$v";
 				}
 				$minus = "";
 			}
@@ -319,6 +324,7 @@ sub RunEncoder {
 	my @output = ();
 	my $output = "";
 	my $otlen = 0;
+	my $otlv = 0;
 	my $otapp = 0;
 	my $otrel = 0;
 	for my $allenc (split(':',$instruct)) {
@@ -341,17 +347,23 @@ sub RunEncoder {
 						#print STDERR "ENC-ASL: $1\n";
 						$otlen = $1 + 0;
 						$otapp = 1;
+					} elsif($k =~ /^ALM([0-9]+)/) {
+						if($1 ne '') {
+							$otlv = $1;
+						} else {
+							$otlv = 1; # added for .DAT
+						}
 					} elsif($k =~ /^0x([0-9a-fA-F]+)$/) {
 						my $tl = length($1) * 4;
 						my $v = oct("0x$1");
 						my $ins = sprintf("%0${tl}b", $v);
 						$ins = substr($ins,-$otlen,$otlen) if($otlen != 0);
+						#print STDERR "ENC-ACL $ins\n";
 						if($otapp == 0) {
 						$output .= $ins;
 						} else {
 						push @output, $ins;
 						$otapp = 0;
-						#print STDERR "ENC-ACL\n";
 						}
 					} elsif($k =~ /^%([01]+)$/ ) {
 						if($otapp == 0) {
@@ -498,7 +510,14 @@ sub Pass2 {
 					}
 
 				} elsif($opname eq '.DAT') {
-
+					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, $arc);
+					print STDERR "\n".join(' ', @lencode) . "\n";
+					my @words;
+					@words = RunEncoder(join(' ', @lencode));
+					print STDERR "\n".join(' ', @words) . "\n";
+					my ($avl, $dat, @bytes) = BinSplit(@words);
+					my $txtbyte = join(' ', @bytes);
+					print STDERR $txtbyte . "\n";
 				}
 
 			} else {
