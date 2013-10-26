@@ -18,6 +18,7 @@ my %symtable;
 my @allfile;
 my $vpc = 0;
 my $errors = 0;
+my $flagpass = 0;
 # CPU specs (these are replaced in loaded file)
 my %cputable = (ISN => "NONE", FILEW => 8, CPUW => 8, CPUM => 8, CPUE => "LE", FILEE => "LE");
 
@@ -168,7 +169,7 @@ sub DecodeSymbol {
 		$v = ($2);
 		$v = -$v if(length($1) % 2 == 1);
 		for my $r (@littable) {
-			print STDERR "LL: $v $r->{rl} $r->{ru}\n";
+			print STDERR "LL: $v [ $r->{rl} $r->{ru} ] ";
 			if($r->{rl} eq '*') {
 				return ("lit", $r, $itab, $v);
 			} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
@@ -187,7 +188,7 @@ sub DecodeSymbols {
 	my @decarg = split(",",$allsym);
 	my @encode = ();
 	for my $arg (@decarg) {
-		print STDERR "DECARG: '$arg'\n";
+		#print STDERR "DECARG: '$arg' ";
 		my @lfs = ();
 		my $minus = "";
 		my @wsa = split(" ",$arg);
@@ -247,54 +248,91 @@ sub RunEncoder {
 	my @output = ();
 	my $output = "";
 	my $otlen = 0;
+	my $otapp = 0;
 	for my $allenc (split(':',$instruct)) {
 		$output = "";
 		$otlen = 0;
 		my @ienc = split(' ', $allenc);
 		foreach my $es (@ienc) {
 			if($es =~ /^L([0-9]+)/) {
-				print STDERR "ENC-STL: $1\n";
+				#print STDERR "ENC-STL: $1\n";
 				$otlen = $1;
 			} elsif($es =~ /\+/) {
 				foreach my $k (split('\+', $es)) {
 					next if($k eq "");
 					if($k =~ /^L([0-9]+)/) {
-						print STDERR "ENC-STL: $1\n";
+						#print STDERR "ENC-STL: $1\n";
 						$otlen = $1 + 0;
+					} elsif($k =~ /^AL([0-9]+)/) {
+						#print STDERR "ENC-ASL: $1\n";
+						$otlen = $1 + 0;
+						$otapp = 1;
 					} elsif($k =~ /^0x([0-9a-fA-F]+)$/) {
 						my $tl = length($1) * 4;
+						if($otapp == 0) {
 						$output .= sprintf("%0${tl}b", oct("0x$1"));
+						} else {
+						push @output, sprintf("%0${tl}b", oct("0x$1"));
+						$otapp = 0;
+						#print STDERR "ENC-ACL\n";
+						}
 					} elsif($k =~ /^%([01]+)$/ ) {
-						$output .= $1;
+						if($otapp == 0) {
+							$output .= $1;
+						} else {
+						push @output, $1;
+						$otapp = 0;
+						#print STDERR "ENC-ACL\n";
+						}
 					} elsif($k =~ /\\([0-9]+)/ ) {
 						my $x = $1 - 1;
-						print STDERR "ENC-Rec: $1 $extra[$x]\n";
+						#print STDERR "ENC-Rec: $1 $extra[$x]\n";
 						my ($ins, @apd) = RunEncoder("+".$extra[$x]);
+						if($otapp == 0) {
 						$output .= $ins;
-						print STDERR "ENC-Res: $ins " . join('',@apd) . "\n";
+						} else {
+						push @output, $ins;
+						$otapp = 0;
+						#print STDERR "ENC-ACL\n";
+						}
+						#print STDERR "ENC-Res: $ins " . join('',@apd) . "\n";
 						push @output, @apd;
 					} elsif($k =~ /^(-*[0-9]+)$/) {
 						my $x = $1 + 0;
 						my $o = sprintf("%0${otlen}b",$x);
-						print STDERR "ENC-int: $x\n";
+						#print STDERR "ENC-int: $x\n";
+						if($otapp == 0) {
 						$output .= $o;
+						} else {
+						push @output, $o;
+						$otapp = 0;
+						print STDERR "ENC-ACL\n";
+						}
+					} elsif($k eq '*') {
+						my $x = sprintf("%0${otlen}b",4);
+						#print STDERR "ENC-fpw: $x\n";
+						if($otapp == 0) {
+						$output .= $x;
+						} else {
+						push @output, $x;
+						$otapp = 0;
+						#print STDERR "ENC-ACL\n";
+						}
 					} else {
-						print STDERR "ENC-unk: '$k'\n";
+						#print STDERR "ENC-unk: '$k'\n";
 					}
 				}
 			}
 		}
-		unshift @output,$output;
+		unshift @output,$output if($output ne '');
 	}
 	return @output;
 }
 
 sub Pass2 {
-	print STDERR "Pass 2\n";
-	my $flagpass = 0;
 	for my $l (@allfile) {
 		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
-		print STDERR join("\t",($.,$label,$opname,$linearg)) . "\t" ;
+		print STDERR join("\t",($l->{lnum},$label,$opname,$linearg)) . "\t" ;
 		if($label ne '') {
 			print STDERR "SYMGEN: $label ".$symtable{$label}{type}."\n";
 			if($symtable{$label}{type} ne "") {
@@ -343,7 +381,7 @@ sub Pass2 {
 			}
 			$encode = join('||',@encode);
 			print STDERR "$format \"$encode\" $enc\n";
-			print join('',RunEncoder($enc, @encode)) . "\n";
+			print join(' ',RunEncoder($enc, @encode)) . "\n";
 		}
 		#print "\n";
 	}
@@ -361,6 +399,7 @@ sub GetLineNum {
 
 sub Assemble {
 	my ($file, $outfile) = @_;
+	my $assmpass = 0;
 	unless( open(ISF, "<", $file) ) {
 		print STDERR $langtable{fileof1} . $file . $langtable{fileof2} . "\n";
 		return;
@@ -417,7 +456,11 @@ sub Assemble {
 		print STDERR join("\t",($.,$label,$opname,$linearg,$enc)) ;
 		print STDERR "\n";
 	}
+	do {
 	$vpc = 0;
 	$errors = 0;
+	$flagpass = 0;
+	print STDERR "Pass $assmpass\n";
 	Pass2();
+	} while(($assmpass++) < 7 && $flagpass == 1);
 }
