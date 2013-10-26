@@ -29,7 +29,7 @@ my @optable = (
 	{op => '.DAT', arc => -1, arf => '*', encode => 'M'}
 );
 
-print STDERR "Wave Asm - version 0.0.0\n";
+print STDERR "Wave Asm - version 0.1.0\n";
 LoadInstructions( $instructionsetfile );
 print STDERR "<optable>\n";
 foreach my $o (@optable) {
@@ -45,7 +45,7 @@ foreach(@ARGV) {
 	} else {
 		@allfile = (); # clear file
 		%symtable = ();
-		Assemble( $_, ($_ . ".lst") );
+		Assemble( $_, ($_ . ".lst") , ($_ . ".bin"));
 	}
 }
 
@@ -146,6 +146,9 @@ sub DecodeSymbol {
 	my $r = $symtable{$sym};
 	if($r->{val} ne '') {
 		if($r->{val} eq '*') {
+			if($itr == -1) {
+				return ("cpc", undef, 0, $r->{val});
+			}
 			for my $l (@littable) {
 				if($ci >= $itr) {
 					if($l->{rl} eq '*') {
@@ -157,7 +160,10 @@ sub DecodeSymbol {
 			}
 		} else {
 			$v = $r->{val};
-			printf STDERR "(%04x)",$v;
+			if($itr == -1) {
+				return ("val", undef, 0, $r->{val});
+			}
+			#printf STDERR "(%04x)",$v;
 			for my $l (@littable) {
 				if($ci >= $itr) {
 					if($l->{rl} eq '*') {
@@ -174,8 +180,23 @@ sub DecodeSymbol {
 	if($sym =~ /^(-*)([0-9]+)$/) {
 		$v = ($2);
 		$v = -$v if(length($1) % 2 == 1);
+		if($itr == -1) {
+			return ("val", undef, 0, $v);
+		}
 		for my $r (@littable) {
 			#print STDERR "LL: $v [ $r->{rl} $r->{ru} ] ";
+			if($r->{rl} eq '*') {
+				return ("lit", $r, $itab, $v);
+			} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
+				return ("lit", $r, $itab, $v);
+			}
+		}
+	} elsif($sym =~ /^(0x[0-9a-fA-F]+)$/) {
+		$v = oct($1);
+		if($itr == -1) {
+			return ("val", undef, 0, $v);
+		}
+		for my $r (@littable) {
 			if($r->{rl} eq '*') {
 				return ("lit", $r, $itab, $v);
 			} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
@@ -253,6 +274,7 @@ sub BinSplit {
 	my @invec = @_;
 	my @out;
 	my $bitcount;
+	my $datout;
 	foreach my $bt (@invec) {
 		my @lout;
 		my $l = length($bt);
@@ -267,9 +289,10 @@ sub BinSplit {
 				push @lout, sprintf("%0${nwl}X",oct("0b".substr($bt,$i,$fwl)));
 			}
 		}
-		push @out, join(' ',@lout);
+		$datout .= pack("H*", join('',@lout)) ;
+		push @out, join('',@lout);
 	}
-	return ($bitcount, @out);
+	return ($bitcount, $datout, @out);
 }
 
 sub RunEncoder {
@@ -361,6 +384,7 @@ sub RunEncoder {
 sub Pass2 {
 	for my $l (@allfile) {
 		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
+		$opname = uc $opname;
 		print STDERR join("\t",($l->{lnum},sprintf("%08x",$vpc),$label,$opname,$linearg)) . "\t" ;
 		if($label ne '') {
 			#print STDERR "SYMGEN: $label ".$symtable{$label}{type}."\n";
@@ -373,13 +397,13 @@ sub Pass2 {
 			}
 		}
 		my $enc = undef;
+		my $found = 0;
+		my $addrmode = 0;
+		my $itr = 0;
+		my $format; my $maxitr;
+		my @encode;
+		my $encode;
 		if($opname ne '') {
-			my $found = 0;
-			my $addrmode = 0;
-			my $itr = 0;
-			my $format; my $maxitr;
-			my @encode;
-			my $encode;
 			do {
 				$found = 0;
 			($format, $maxitr, @encode) = DecodeSymbols($linearg, $itr);
@@ -397,23 +421,61 @@ sub Pass2 {
 			$itr++;
 			#print STDERR "ITR: $itr $found $addrmode\n";
 			} while($found != 0 && $itr < $maxitr && $addrmode == 0);
-			if($found == 0) {
+		} else {
+			$found = -1; #no opcode on line
+			$addrmode = -1;
+		}
+		if($found == 0) {
+			print STDERR "$langtable{error}: $langtable{line} $l->{lnum}:",
+			" $opname - $langtable{opunkn}\n$l->{ltxt}\n";
+			$errors++;
+		} else {
+			if($addrmode == 0) {
 				print STDERR "$langtable{error}: $langtable{line} $l->{lnum}:",
-				" $opname - $langtable{opunkn}\n$l->{ltxt}\n";
-				$errors++;
-			} else {
-				if($addrmode == 0) {
-					print STDERR "$langtable{error}: $langtable{line} $l->{lnum}:",
 					" $opname - $langtable{addrunkn}\n$l->{ltxt}\n";
-					$errors++;
+				$errors++;
+			} elsif($enc eq 'M') {
+				if($opname eq '.ORG') {
+					my ($type, $vec, $i, $v) = DecodeSymbol($linearg,-1);
+					if($type eq "val") {
+						$vpc = $v;
+					}
+					# rerun line labels
+					if($label ne '') {
+					if($symtable{$label}{type} ne "") {
+					if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
+						$symtable{$label}{val} = $vpc;
+						$flagpass++;
+					}
+					}
+					}
+				} elsif($opname eq '.EQU') {
+					my ($type, $vec, $i, $v) = DecodeSymbol($linearg,-1);
+					if($type eq "val") {
+					if($label ne '') {
+					if($symtable{$label}{val} != $v) {
+						$symtable{$label}{val} = $v;
+						$flagpass++;
+					}
+					}
+					}
+
 				}
+
+			} else {
 			}
+		}
+		if($found >= 1 && $addrmode == 1) {
 			$encode = join('||',@encode);
 			#print STDERR "$format \"$encode\" $enc\n";
 			my @words = RunEncoder($enc, @encode);
-			my ($avl, @bytes) = BinSplit(@words);
+			my ($avl, $dat, @bytes) = BinSplit(@words);
+			$l->{addr} = $vpc;
 			$vpc += ($avl / $cputable{CPUM});
-			print join(' ',@bytes) . "\n";
+			my $txtbyte = join('', @bytes);
+			print STDERR $txtbyte . "\n";
+			$l->{byte} = $txtbyte;
+			$l->{dat} = $dat;
 		}
 		#print "\n";
 	}
@@ -430,7 +492,7 @@ sub GetLineNum {
 }
 
 sub Assemble {
-	my ($file, $outfile) = @_;
+	my ($file, $outfile, $outbinfile) = @_;
 	my $assmpass = 0;
 	unless( open(ISF, "<", $file) ) {
 		print STDERR $langtable{fileof1} . $file . $langtable{fileof2} . "\n";
@@ -440,6 +502,14 @@ sub Assemble {
 		print STDERR $langtable{fileof1} . $outfile . $langtable{fileof2} . "\n";
 		close ISF;
 		return;
+	}
+	unless( open(OBF, ">", $outbinfile) ) {
+		print STDERR $langtable{fileof1} . $outbinfile . $langtable{fileof2} . "\n";
+		close ISF;
+		close OSF;
+		return;
+	} else {
+		binmode OBF;
 	}
 	$errors = 0;
 	while(<ISF>) {
@@ -496,4 +566,15 @@ sub Assemble {
 	print STDERR "Pass $assmpass\n";
 	Pass2();
 	} while(($assmpass++) < 7 && $flagpass == 1);
+	if($errors == 0) {
+		print STDERR "Complete!\n";
+		foreach my $l (@allfile) {
+		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
+		print OSF join("\t",($l->{lnum},sprintf("%08x",$l->{addr}),$label,$opname,$linearg),$l->{byte}) . "\n" ;
+			print OBF $l->{dat};
+		}
+	}
+	close ISF;
+	close OSF;
+	close OBF;
 }
