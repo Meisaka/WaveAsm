@@ -12,13 +12,16 @@ How to Use
 
 The current version is written in perl, perl comes with all standard Unix and Linux distros
 Running is simple, on Linux/Unix:
+
 	./WaveAsm.pl somefile.to.asm
+
 on Windows:
+
 	\Path\to\perl.exe WaveAsm.pl somefile.to.asm
 
 This will generate two files:
-  somefile.to.asm.lst - which contains the final listing.
-  somefile.to.asm.bin - a flat binary file in the endieness of the CPU target.
+ - somefile.to.asm.lst - which contains the final listing.
+ - somefile.to.asm.bin - a flat binary file in the endieness of the CPU target.
 
 This will also print out quite a bit of debug info, along with any errors.
 If the debug output does not have "complete!" at the end, check for errors.
