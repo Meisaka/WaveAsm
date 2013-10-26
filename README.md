@@ -12,9 +12,9 @@ How to Use
 
 The current version is written in perl, perl comes with all standard Unix and Linux distros
 Running is simple, on Linux/Unix:
-    ./WaveAsm.pl somefile.to.asm
+	./WaveAsm.pl somefile.to.asm
 on Windows:
-    \Path\to\perl.exe WaveAsm.pl somefile.to.asm
+	\Path\to\perl.exe WaveAsm.pl somefile.to.asm
 
 This will generate two files:
   somefile.to.asm.lst - which contains the final listing.
