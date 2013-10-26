@@ -35,9 +35,9 @@ print STDERR "<optable>\n";
 foreach my $o (@optable) {
 	print STDERR $o->{op} . " ";
 }
-print STDERR "<regtable>\n";
+print STDERR "\n<regtable>\n";
 foreach my $o (@regtable) {
-	print STDERR "$o->{reg} $o->{nam} $o->{encode} \n";
+	print STDERR "$o->{reg} $o->{nam} $o->{encode} ";
 }
 foreach(@ARGV) {
 	if(/^--/) {
@@ -61,10 +61,15 @@ sub LoadInstructions {
 	while( <ISF> ) {
 		s/\n//;
 		if(/<HEAD>/ .. /<\/HEAD>/) {
+			if(/^\W*#/ or /\</) {
+			} elsif(/:/) {
+				my ($k, $v) = split(':', $_);
+				$cputable{$k} = $v;
+			}
 		} elsif(/<REG>/ .. /<\/REG>/) {
 			if(/^\W*#/ or /\</) {
 			} elsif(/^\+/) {
-				print STDERR "AttribSet: $_\n";
+				#print STDERR "AttribSet: $_\n";
 				s/^\+//;
 				%att = ();
 				@attribs = split(',', $_);
@@ -77,7 +82,7 @@ sub LoadInstructions {
 				@creg = split(':', $_);
 				@mcr = split(',', ($creg[0]));
 				foreach(@mcr) {
-					print STDERR "REG: $_ " . $creg[1]  . "\n";
+					#print STDERR "REG: $_ " . $creg[1]  . "\n";
 					push @regtable, ({reg => $_, nam => $att{nam}, encode => $creg[1]});
 				}
 			}
@@ -85,7 +90,7 @@ sub LoadInstructions {
 			if(/^\W*#/ or /\</) {
 				next;
 			} elsif(/^\+/) {
-				print STDERR "AttribSet: $_\n";
+				#print STDERR "AttribSet: $_\n";
 				s/^\+//;
 				%att = ();
 				@attribs = split(',', $_);
@@ -96,7 +101,7 @@ sub LoadInstructions {
 						$att{len} = $1;
 					}
 				}
-				print STDERR "+NAME=$att{nam} +LEN=$att{len}\n";
+				#print STDERR "+NAME=$att{nam} +LEN=$att{len}\n";
 			} else {
 				my ($range, @encode) = split(':', $_);
 				my ($rl,$ru) = split(',', $range);
@@ -104,7 +109,7 @@ sub LoadInstructions {
 				for my $i (@encode) {
 					$i = "L$att{len}*" if($i eq '*');
 				}
-				print STDERR "LIT: $att{nam} $range $att{len} " . join(':',@encode) . "\n";
+				#print STDERR "LIT: $att{nam} $range $att{len} " . join(':',@encode) . "\n";
 				push @littable, ({rl => $rl, ru => $ru, nam => $att{nam}, encode => join(':',@encode)});
 
 			}
@@ -117,11 +122,11 @@ sub LoadInstructions {
 				$opname =~ s/"//g;
 				my $fcode = $opparam[2];
 				$fcode =~ s/"([^"]+)"/\1/;
-				print STDERR "OPCODE: $opname $fcode\n";
+				#print STDERR "OPCODE: $opname $fcode\n";
 				push @optable, {op => $opname, arc => $opparam[1], arf => $fcode, encode => $opparam[3]};
 			}
 		} elsif(/^[\t ]*#/) {
-			print STDERR $_;
+			#print STDERR $_;
 		}
 	}
 	close ISF;
@@ -152,6 +157,7 @@ sub DecodeSymbol {
 			}
 		} else {
 			$v = $r->{val};
+			printf STDERR "(%04x)",$v;
 			for my $l (@littable) {
 				if($ci >= $itr) {
 					if($l->{rl} eq '*') {
@@ -169,7 +175,7 @@ sub DecodeSymbol {
 		$v = ($2);
 		$v = -$v if(length($1) % 2 == 1);
 		for my $r (@littable) {
-			print STDERR "LL: $v [ $r->{rl} $r->{ru} ] ";
+			#print STDERR "LL: $v [ $r->{rl} $r->{ru} ] ";
 			if($r->{rl} eq '*') {
 				return ("lit", $r, $itab, $v);
 			} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
@@ -243,6 +249,29 @@ sub DecodeSymbols {
 	return ($format,$maxitr,@encode);
 }
 
+sub BinSplit {
+	my @invec = @_;
+	my @out;
+	my $bitcount;
+	foreach my $bt (@invec) {
+		my @lout;
+		my $l = length($bt);
+		$bitcount += $l;
+		my $fwl = $cputable{FILEW};
+		my $nwl = $fwl / 4;
+		my $bwl = $fwl / 8;
+		for(my $i = 0; $i < $l; $i += $fwl) {
+			if($cputable{CPUE} eq "LE") {
+				unshift @lout, sprintf("%0${nwl}X",oct("0b".substr($bt,$i,$fwl)));
+			} else {
+				push @lout, sprintf("%0${nwl}X",oct("0b".substr($bt,$i,$fwl)));
+			}
+		}
+		push @out, join(' ',@lout);
+	}
+	return ($bitcount, @out);
+}
+
 sub RunEncoder {
 	my ($instruct, @extra) = @_;
 	my @output = ();
@@ -306,7 +335,7 @@ sub RunEncoder {
 						} else {
 						push @output, $o;
 						$otapp = 0;
-						print STDERR "ENC-ACL\n";
+						#print STDERR "ENC-ACL\n";
 						}
 					} elsif($k eq '*') {
 						my $x = sprintf("%0${otlen}b",4);
@@ -332,13 +361,13 @@ sub RunEncoder {
 sub Pass2 {
 	for my $l (@allfile) {
 		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
-		print STDERR join("\t",($l->{lnum},$label,$opname,$linearg)) . "\t" ;
+		print STDERR join("\t",($l->{lnum},sprintf("%08x",$vpc),$label,$opname,$linearg)) . "\t" ;
 		if($label ne '') {
-			print STDERR "SYMGEN: $label ".$symtable{$label}{type}."\n";
+			#print STDERR "SYMGEN: $label ".$symtable{$label}{type}."\n";
 			if($symtable{$label}{type} ne "") {
 				if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
 					$symtable{$label}{val} = $vpc;
-			print STDERR "SYMSET: $label $symtable{$label}{val}\n";
+					#print STDERR "SYMSET: $label $symtable{$label}{val}\n";
 					$flagpass++;
 				}
 			}
@@ -366,7 +395,7 @@ sub Pass2 {
 				}
 			}
 			$itr++;
-			print STDERR "ITR: $itr $found $addrmode\n";
+			#print STDERR "ITR: $itr $found $addrmode\n";
 			} while($found != 0 && $itr < $maxitr && $addrmode == 0);
 			if($found == 0) {
 				print STDERR "$langtable{error}: $langtable{line} $l->{lnum}:",
@@ -380,8 +409,11 @@ sub Pass2 {
 				}
 			}
 			$encode = join('||',@encode);
-			print STDERR "$format \"$encode\" $enc\n";
-			print join(' ',RunEncoder($enc, @encode)) . "\n";
+			#print STDERR "$format \"$encode\" $enc\n";
+			my @words = RunEncoder($enc, @encode);
+			my ($avl, @bytes) = BinSplit(@words);
+			$vpc += ($avl / $cputable{CPUM});
+			print join(' ',@bytes) . "\n";
 		}
 		#print "\n";
 	}
@@ -456,6 +488,7 @@ sub Assemble {
 		print STDERR join("\t",($.,$label,$opname,$linearg,$enc)) ;
 		print STDERR "\n";
 	}
+	$assmpass = 2;
 	do {
 	$vpc = 0;
 	$errors = 0;
