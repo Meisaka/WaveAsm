@@ -28,9 +28,10 @@ If the debug output does not have "complete!" at the end, check for errors.
 
 Supported Macros
 ----
-WaveAsm supports 2 macros at the moment:
+WaveAsm supports 3 macros at the moment:
  - .ORG - setting where the code is generated for.
  - .EQU - Set the label on the line to whatever value is supplied.
+ - .DAT - Encode values into minimally sized memory words in the endianess of the CPU
 
 Note:
 .ORG generates code to run a at specified address, but the binary file is flat, so a relocator or specific load address will be needed.

@@ -30,7 +30,7 @@ my @optable = (
 	{op => '.DAT', arc => -1, arf => '*', encode => 'M'}
 );
 
-print STDERR "Wave Asm - version 0.1.0\n";
+print STDERR "Wave Asm - version 0.1.2\n";
 LoadInstructions( $instructionsetfile );
 print STDERR "<optable>\n";
 foreach my $o (@optable) {
@@ -294,6 +294,19 @@ sub DecodeSymbols {
 	return ($format,$maxitr,@encode);
 }
 
+sub PadWord {
+	my ($inw) = @_;
+	my $inl = length($inw);
+	my $disp = ( $inl % $cputable{CPUM} );
+	return $inw if($disp == 0);
+	my $pdz = $cputable{CPUM} - $disp;
+	if($pdz == 0) {
+		return $inw;
+	} else {
+		return sprintf("%0${pdz}b%s",0,$inw);
+	}
+}
+
 sub BinSplit {
 	my @invec = @_;
 	my @out;
@@ -347,10 +360,11 @@ sub RunEncoder {
 						#print STDERR "ENC-ASL: $1\n";
 						$otlen = $1 + 0;
 						$otapp = 1;
-					} elsif($k =~ /^ALM([0-9]+)/) {
+					} elsif($k =~ /^ALM([0-9]*)/) {
 						if($1 ne '') {
 							$otlv = $1;
 						} else {
+							$otapp = 1;
 							$otlv = 1; # added for .DAT
 						}
 					} elsif($k =~ /^0x([0-9a-fA-F]+)$/) {
@@ -358,6 +372,7 @@ sub RunEncoder {
 						my $v = oct("0x$1");
 						my $ins = sprintf("%0${tl}b", $v);
 						$ins = substr($ins,-$otlen,$otlen) if($otlen != 0);
+						$ins = PadWord($ins) if($otlv != 0);
 						#print STDERR "ENC-ACL $ins\n";
 						if($otapp == 0) {
 						$output .= $ins;
@@ -366,10 +381,13 @@ sub RunEncoder {
 						$otapp = 0;
 						}
 					} elsif($k =~ /^%([01]+)$/ ) {
+						my $x = $1;
+						$x = substr($x,-$otlen,$otlen) if($otlen != 0);
+						$x = PadWord($x) if($otlv != 0);
 						if($otapp == 0) {
-							$output .= $1;
+							$output .= $x;
 						} else {
-						push @output, $1;
+						push @output, $x;
 						$otapp = 0;
 						#print STDERR "ENC-ACL\n";
 						}
@@ -390,6 +408,7 @@ sub RunEncoder {
 						my $x = $1 + 0;
 						my $o = sprintf("%0${otlen}b",$x);
 						$o = substr($o,-$otlen,$otlen) if($otlen != 0);
+						$o = PadWord($o) if($otlv != 0);
 						#print STDERR "ENC-int: $x\n";
 						if($otapp == 0) {
 						$output .= $o;
@@ -511,13 +530,22 @@ sub Pass2 {
 
 				} elsif($opname eq '.DAT') {
 					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, $arc);
-					print STDERR "\n".join(' ', @lencode) . "\n";
+					#print STDERR "\n".join(' ', @lencode) ;
 					my @words;
 					@words = RunEncoder(join(' ', @lencode));
-					print STDERR "\n".join(' ', @words) . "\n";
+					#print STDERR "\n".join(' ', @words) . "\n";
 					my ($avl, $dat, @bytes) = BinSplit(@words);
 					my $txtbyte = join(' ', @bytes);
 					print STDERR $txtbyte . "\n";
+					# encode data
+					$l->{addr} = $vpc;
+					$vinstrend = ($avl / $cputable{CPUM});
+					$vpc += $vinstrend;
+					$flagpass++ if($l->{ilen} != $vinstrend);
+					$l->{ilen} = $vinstrend + 0;
+					$l->{byte} = $txtbyte;
+					$l->{dat} = $dat;
+					$addrmode = -1;
 				}
 
 			} else {
