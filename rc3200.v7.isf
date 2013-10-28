@@ -68,14 +68,16 @@ FILEW:8
 -4095,4095:*
 # special encoding
 # encode all numbers as 0x10, +A append L32 bits, * encode in that
-*:%1000000000000:+AL32*
+*:0x100:+AL32*
 # set Name"NAME", Length 13 bits
+# inmediate for P2
 +N"L2",L18 FR
 -131071,131071:*
-*:%10+0x0000:+AL32*
+*:%20000:+AL32*
+# inmediate for P1
 +N"L3",L22 FR
 -4194303,4194303:*
-*:%10+0x00000:+AL32*
+*:0x400000:+AL32*
 </LIT>
 <OPCODE>
 # "NAME":params[,params...]:"paramformat":encoding
@@ -151,9 +153,9 @@ SWP:2:"R,R":L32    0x81+%0+0x000+%0+\2+\1
 SIGXB:2:"R,R":L32  0x82+%0+0x000+%0+\2+\1
 SIGXW:2:"R,L2":L32 0x83+%1+\2+\1
 # 
-XCHGB:1:"R":L32    0x20+%0+0x00000+%00+\1
-XCHGW:1:"R":L32    0x21+%0+0x00000+%00+\1
-GETPC:1:"R":L32    0x22+%0+0x00000+%00+\1
+XCHGB:1:"R":L32    0x200000+%000+\1
+XCHGW:1:"R":L32    0x210000+%000+\1
+GETPC:1:"R":L32    0x220000+%000+\1
 #
 # -- ALU Instructions
 # Bitwise boolean
@@ -220,32 +222,28 @@ IFCLEAR:2:"R,L2":L32 0xA7+%1+\2+\1
 JMP:2:"R+R":L32      0xE0+%0+0x000+%0+\2+\1
 JMP:2:"R+L2":L32     0xE0+%1+\2+\1
 JMP:2:"L2+R":L32     0xE0+%1+\1+\2
-JMP:1:"R":L32        0x38+%0+0x00000+%00+\1
+JMP:1:"R":L32        0x380000+%000+\1
 JMP:1:"L3":L32       0x38+%1+\1
 # Relative Jumps
-JMP:1:"%pc+R":L32    0x3A+%0+0x00000+%00+\1
-JMP:1:"%pc+L3":L32   0x3A+%1+\1
-RJMP:1:"R":L32       0x3A+%0+0x00000+%00+\1
+RJMP:1:"R":L32       0x3A0000+%000+\1
 RJMP:1:"L3":L32      0x3A+%1+\1
 # Call
 CALL:2:"R+R":L32     0xE1+%0+0x000+%0+\2+\1
 CALL:2:"R+L2":L32    0xE1+%1+\2+\1
 CALL:2:"L2+R":L32    0xE1+%1+\1+\2
-CALL:1:"R":L32       0x39+%0+0x00000+%00+\1
+CALL:1:"R":L32       0x390000+%000+\1
 CALL:1:"L3":L32      0x39+%1+\1
 # Relative Calls
-CALL:1:"%pc+R":L32   0x3B+%0+0x00000+%00+\1
-CALL:1:"%pc+L3":L32  0x3B+%1+\1
-RCALL:1:"R":L32      0x3B+%0+0x00000+%00+\1
+RCALL:1:"R":L32      0x3B0000+%000+\1
 RCALL:1:"L3":L32     0x3B+%1+\1
 # Return
 RET:0::L32 +0x00000004
 # -- STACK
-POP:1:"R":L32        0x29+%0+0x00000+%00+\1
-PUSH:1:"R":L32       0x2A+%0+0x00000+%00+\1
+POP:1:"R":L32        0x290000+%000+\1
+PUSH:1:"R":L32       0x2A0000+%000+\1
 PUSH:1:"L3":L32      0x2A+%1+\1
 # -- Interrupts
-INT:1:"R":L32        0x3C+%0+0x00000+%00+\1
+INT:1:"R":L32        0x3C0000+%000+\1
 INT:1:"L3":L32       0x3C+%1+\1
 RFI:0::L32 +0x00000005
 # -- Special and others
