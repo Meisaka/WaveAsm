@@ -66,4 +66,6 @@ loop:
         POP  %r28           ; Addr 0E8h   %r29 = 0xFFFFCAFE
     
         JMP begin           ; Addr 0ECh   Jumps to 0
-
+table:	.DAT 0x55,0x1234,65,33,12
+	.DAT 4,0xAA,2,0x12345678
+	SET %r11, 0x11
