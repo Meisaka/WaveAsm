@@ -59,7 +59,7 @@ loop:
         JMP loop            ; Jumps to 0C4h
 
 end_loop:        
-        MOV %sp, 0x20000    ; (Stack pointer to the last address of RAM)
+        MOV %r31, 0x20000    ; (Stack pointer to the last address of RAM)
     
         PUSH -13570         ; push 0xFFFFCAFE
         PUSH %r6
