@@ -54,19 +54,50 @@ loop:
         NOP                 ; Addr 0C4h
         ADD %r0, %r0, 1
 
-        IFG %r0, 10         ; Addr 0CCh
-            JMP end_loop    ; Ends the loop
-        JMP loop            ; Jumps to 0C4h
+        IFL %r0, 10         ; Addr 0CCh
+            JMP loop            ; Jumps to 0C4h
 
 end_loop:        
-        MOV %r31, 0x20000    ; (Stack pointer to the last address of RAM)
+        MOV %sp, 0x20000    ; (Stack pointer to the last address of RAM)
     
         PUSH -13570         ; push 0xFFFFCAFE
         PUSH %r6
         POP  %r29
         POP  %r28           ; Addr 0E8h   %r29 = 0xFFFFCAFE
     
-        JMP begin           ; Addr 0ECh   Jumps to 0
+        MOV %r0, 2
+        MOV %r1, 4
+        CALL function_pow   ; Should return %r0 = 2^4 = 16
+
+        JMP begin           ; Jumps to 0
 table:  .DAT 0x55,0x1234,65,33,12
         .DAT 4,0xAA,2,0x12345678
         MOV %r11, 0x11
+
+; Function naive interger power
+; Params :
+;  %r0 base
+;  %r1 poitive exponent
+; Return :
+;  %r0 = base ^ exponent
+function_pow:
+        PUSH %r4
+        PUSH %y
+        PUSH %flags
+
+        MOV %r4, 0
+    
+function_pow_beginloop:
+        IFLE %r1, %r4           ; While %r4 < %r0
+            RJMP function_pow_endloop
+        MUL %r0, %r0, %r0       ; %r0 *= %r0
+        ADD %r4, %r4, 1         ; %r4++
+        RJMP function_pow_beginloop
+
+function_pow_endloop:
+
+        POP %flags
+        POP %y
+        POP %r4
+
+        RET
