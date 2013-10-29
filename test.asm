@@ -72,7 +72,9 @@ end_loop:
         JMP begin           ; Jumps to 0
 table:  .DAT 0x55,0x1234,65,33,12
         .DAT 4,0xAA,2,0x12345678
+        .DAT 0x00, 0x00, 0x00   ; Padding
         MOV %r11, 0x11
+
 
 ; Function naive interger power
 ; Params :
@@ -82,15 +84,18 @@ table:  .DAT 0x55,0x1234,65,33,12
 ;  %r0 = base ^ exponent
 function_pow:
         PUSH %r4
+        PUSH %r5
         PUSH %y
         PUSH %flags
 
         MOV %r4, 0
+        MOV %r5, %r0
+        MOV %r0, 1              ; x^0 = 1
     
 function_pow_beginloop:
-        IFLE %r1, %r4           ; While %r4 < %r0
+        IFLE %r1, %r4            ; While %r1 >= %r4 (exponent >= counter)
             RJMP function_pow_endloop
-        MUL %r0, %r0, %r0       ; %r0 *= %r0
+        MUL %r0, %r0, %r5       ; %r0 = %r0 * base
         ADD %r4, %r4, 1         ; %r4++
         RJMP function_pow_beginloop
 
@@ -98,6 +103,7 @@ function_pow_endloop:
 
         POP %flags
         POP %y
+        POP %r5
         POP %r4
 
         RET
