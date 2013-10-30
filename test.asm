@@ -69,6 +69,12 @@ end_loop:
         MOV %r1, 4
         CALL function_pow   ; Should return %r0 = 2^4 = 16
 
+        MOV %r1, 0xFF0A0000
+        LOAD.B %r5, %r1
+        STORE %r1, %r5
+        ADD %r1, %r1, 4
+        STORE %r1, %r0
+
         JMP begin           ; Jumps to 0
 table:  .DAT 0x55,0x1234,65,33,12
         .DAT 4,0xAA,2,0x12345678
