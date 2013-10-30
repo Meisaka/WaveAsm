@@ -21,7 +21,7 @@ my $vinstrend = 0;
 my $errors = 0;
 my $flagpass = 0;
 # CPU specs (these are replaced in loaded file)
-my %cputable = (ISN => "NONE", FILEW => 8, CPUW => 8, CPUM => 8, CPUE => "LE", FILEE => "LE");
+my %cputable = (ISN => "NONE", FILEW => 8, CPUW => 8, CPUM => 8, CPUE => "LE", FILEE => "LE", ALIGN => 0);
 
 # build-in instructions
 my @optable = (
@@ -30,7 +30,7 @@ my @optable = (
 	{op => '.DAT', arc => -1, arf => '*', encode => 'M'}
 );
 
-print STDERR "Wave Asm - version 0.1.2\n";
+print STDERR "Wave Asm - version 0.1.4\n";
 LoadInstructions( $instructionsetfile );
 print STDERR "<optable>\n";
 foreach my $o (@optable) {
@@ -471,7 +471,15 @@ sub Pass2 {
 				if(($i->{op}) eq ($opname)) {
 					$enc = $i->{encode};
 					$arc = $i->{arc};
-					$addrmode = 1 if($enc eq 'M');
+					if($enc eq 'M') {
+						$addrmode = 1;
+					} else {
+						my $align;
+						if($cputable{ALIGN} > 0) {
+							$align = $vpc % $cputable{ALIGN};
+							$vpc += $align; # align words
+						}
+					}
 					$found++;
 					my $tmxr;
 			($format, $tmxr, @encode) = DecodeSymbols($linearg, $itr, $arc);
