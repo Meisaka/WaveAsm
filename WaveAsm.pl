@@ -21,16 +21,19 @@ my $vinstrend = 0;
 my $errors = 0;
 my $flagpass = 0;
 # CPU specs (these are replaced in loaded file)
-my %cputable = (ISN => "NONE", FILEW => 8, CPUW => 8, CPUM => 8, CPUE => "LE", FILEE => "LE");
+my %cputable = (ISN => "NONE", FILEW => 8, CPUW => 8, CPUM => 8, CPUE => "LE", FILEE => "LE", ALIGN => 0);
 
 # build-in instructions
 my @optable = (
 	{op => '.ORG', arc => 1, arf => '*', encode => 'M'},
 	{op => '.EQU', arc => 1, arf => '*', encode => 'M'},
-	{op => '.DAT', arc => -1, arf => '*', encode => 'M'}
+	{op => '.DAT', arc => -1, arf => '*', encode => 'M'},
+	{op => '.DB', arc => -1, arf => '*', encode => 'M'},
+	{op => '.DW', arc => -1, arf => '*', encode => 'M'},
+	{op => '.DD', arc => -1, arf => '*', encode => 'M'}
 );
 
-print STDERR "Wave Asm - version 0.1.2\n";
+print STDERR "Wave Asm - version 0.1.4\n";
 LoadInstructions( $instructionsetfile );
 print STDERR "<optable>\n";
 foreach my $o (@optable) {
@@ -221,7 +224,7 @@ sub DecodeSymbol {
 }
 
 sub DecodeSymbols {
-	my ($allsym, $itr, $arc) = @_;
+	my ($allsym, $itr, $arc, $wordsz) = @_;
 	my $format;
 	my @format = ();
 	my $maxitr = 0;
@@ -229,6 +232,10 @@ sub DecodeSymbols {
 	my @encode = ();
 	my $userel = 0;
 	my ($iis, $mrel) = split(',',$arc);
+	my $ewordsz = "";
+	if($wordsz != undef && $wordsz > 1) {
+		$ewordsz = $wordsz;
+	}
 	if($mrel =~ /r/) {
 		$userel = 1;
 	}
@@ -265,7 +272,7 @@ sub DecodeSymbols {
 					push @encode, $vec->{encode} ."+$v";
 					$maxitr = $i;
 				} elsif($type eq "val") {
-					push @encode, "+ALM+$v";
+					push @encode, "+ALM$ewordsz+$v";
 				} else {
 					push @lfs, "*";
 					push @encode, "+$v";
@@ -282,7 +289,7 @@ sub DecodeSymbols {
 					push @encode, $vec->{encode}. "+$v";
 					$maxitr = $i;
 				} elsif($type eq "val") {
-					push @encode, "+ALM+$v";
+					push @encode, "+ALM$ewordsz+$v";
 				}
 				$minus = "";
 			}
@@ -362,7 +369,9 @@ sub RunEncoder {
 						$otapp = 1;
 					} elsif($k =~ /^ALM([0-9]*)/) {
 						if($1 ne '') {
-							$otlv = $1;
+							$otapp = 1;
+							$otlv = 1;
+							$otlen = $1;
 						} else {
 							$otapp = 1;
 							$otlv = 1; # added for .DAT
@@ -449,6 +458,7 @@ sub Pass2 {
 			if($symtable{$label}{type} ne "") {
 				if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
 					$symtable{$label}{val} = $vpc;
+					$l->{addr} = $vpc;
 					#print STDERR "SYMSET: $label $symtable{$label}{val}\n";
 					$flagpass++;
 				}
@@ -471,7 +481,15 @@ sub Pass2 {
 				if(($i->{op}) eq ($opname)) {
 					$enc = $i->{encode};
 					$arc = $i->{arc};
-					$addrmode = 1 if($enc eq 'M');
+					if($enc eq 'M') {
+						$addrmode = 1;
+					} else {
+						my $align;
+						if($cputable{ALIGN} > 0) {
+							$align = $vpc % $cputable{ALIGN};
+							$vpc += $cputable{ALIGN} - $align if($align > 0); # align words
+						}
+					}
 					$found++;
 					my $tmxr;
 			($format, $tmxr, @encode) = DecodeSymbols($linearg, $itr, $arc);
@@ -489,6 +507,7 @@ sub Pass2 {
 		} else {
 			$found = -1; #no opcode on line
 			$addrmode = -1;
+			print STDERR "\n" if($label ne '');
 		}
 		if($found == 0) {
 			print STDERR "$langtable{error}: $langtable{line} $l->{lnum}:",
@@ -528,8 +547,14 @@ sub Pass2 {
 					}
 					}
 
-				} elsif($opname eq '.DAT') {
+				} elsif($opname =~ /^.D(AT|[BDW])$/) {
+					if($1 eq 'W') {
+					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, $arc, 16);
+					} elsif($1 eq 'D') {
+					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, $arc, 32);
+					} else {
 					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, $arc);
+					}
 					#print STDERR "\n".join(' ', @lencode) ;
 					my @words;
 					@words = RunEncoder(join(' ', @lencode));
@@ -676,6 +701,10 @@ sub Assemble {
 		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
 		print OSF join("\t",($l->{lnum},sprintf("%08x",$l->{addr}),$label,$opname,$linearg),$l->{byte}) . "\n" ;
 			print OBF $l->{dat};
+		}
+		print OSF "Symbols:\n";
+		foreach my $l (keys %symtable) {
+			printf OSF "%08x  %s\n",$symtable{$l}{val},$l
 		}
 	}
 	close ISF;
