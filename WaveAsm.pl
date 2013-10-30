@@ -27,7 +27,10 @@ my %cputable = (ISN => "NONE", FILEW => 8, CPUW => 8, CPUM => 8, CPUE => "LE", F
 my @optable = (
 	{op => '.ORG', arc => 1, arf => '*', encode => 'M'},
 	{op => '.EQU', arc => 1, arf => '*', encode => 'M'},
-	{op => '.DAT', arc => -1, arf => '*', encode => 'M'}
+	{op => '.DAT', arc => -1, arf => '*', encode => 'M'},
+	{op => '.DB', arc => -1, arf => '*', encode => 'M'},
+	{op => '.DW', arc => -1, arf => '*', encode => 'M'},
+	{op => '.DD', arc => -1, arf => '*', encode => 'M'}
 );
 
 print STDERR "Wave Asm - version 0.1.4\n";
@@ -221,7 +224,7 @@ sub DecodeSymbol {
 }
 
 sub DecodeSymbols {
-	my ($allsym, $itr, $arc) = @_;
+	my ($allsym, $itr, $arc, $wordsz) = @_;
 	my $format;
 	my @format = ();
 	my $maxitr = 0;
@@ -229,6 +232,10 @@ sub DecodeSymbols {
 	my @encode = ();
 	my $userel = 0;
 	my ($iis, $mrel) = split(',',$arc);
+	my $ewordsz = "";
+	if($wordsz != undef && $wordsz > 1) {
+		$ewordsz = $wordsz;
+	}
 	if($mrel =~ /r/) {
 		$userel = 1;
 	}
@@ -265,7 +272,7 @@ sub DecodeSymbols {
 					push @encode, $vec->{encode} ."+$v";
 					$maxitr = $i;
 				} elsif($type eq "val") {
-					push @encode, "+ALM+$v";
+					push @encode, "+ALM$ewordsz+$v";
 				} else {
 					push @lfs, "*";
 					push @encode, "+$v";
@@ -282,7 +289,7 @@ sub DecodeSymbols {
 					push @encode, $vec->{encode}. "+$v";
 					$maxitr = $i;
 				} elsif($type eq "val") {
-					push @encode, "+ALM+$v";
+					push @encode, "+ALM$ewordsz+$v";
 				}
 				$minus = "";
 			}
@@ -362,7 +369,9 @@ sub RunEncoder {
 						$otapp = 1;
 					} elsif($k =~ /^ALM([0-9]*)/) {
 						if($1 ne '') {
-							$otlv = $1;
+							$otapp = 1;
+							$otlv = 1;
+							$otlen = $1;
 						} else {
 							$otapp = 1;
 							$otlv = 1; # added for .DAT
@@ -538,8 +547,14 @@ sub Pass2 {
 					}
 					}
 
-				} elsif($opname eq '.DAT') {
+				} elsif($opname =~ /^.D(AT|[BDW])$/) {
+					if($1 eq 'W') {
+					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, $arc, 16);
+					} elsif($1 eq 'D') {
+					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, $arc, 32);
+					} else {
 					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, $arc);
+					}
 					#print STDERR "\n".join(' ', @lencode) ;
 					my @words;
 					@words = RunEncoder(join(' ', @lencode));
