@@ -72,7 +72,8 @@ end_loop:
         JMP begin           ; Jumps to 0
 table:  .DAT 0x55,0x1234,65,33,12
         .DAT 4,0xAA,2,0x12345678
-        .DAT 0x00, 0x00, 0x00   ; Padding
+	; Test align function
+	; .DAT 0x00, 0x00, 0x00   ; Padding
         MOV %r11, 0x11
 
 

@@ -12,6 +12,7 @@ CPUW:32
 FILEE:LE
 # file word size
 FILEW:8
+ALIGN:4
 </HEAD>
 <REG>
 # attribs set Index 32 bit,Data 32 bit,encode Length 5 (bits),Name"R"

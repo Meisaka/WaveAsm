@@ -449,6 +449,7 @@ sub Pass2 {
 			if($symtable{$label}{type} ne "") {
 				if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
 					$symtable{$label}{val} = $vpc;
+					$l->{addr} = $vpc;
 					#print STDERR "SYMSET: $label $symtable{$label}{val}\n";
 					$flagpass++;
 				}
@@ -477,7 +478,7 @@ sub Pass2 {
 						my $align;
 						if($cputable{ALIGN} > 0) {
 							$align = $vpc % $cputable{ALIGN};
-							$vpc += $align; # align words
+							$vpc += $cputable{ALIGN} - $align if($align > 0); # align words
 						}
 					}
 					$found++;
@@ -497,6 +498,7 @@ sub Pass2 {
 		} else {
 			$found = -1; #no opcode on line
 			$addrmode = -1;
+			print STDERR "\n" if($label ne '');
 		}
 		if($found == 0) {
 			print STDERR "$langtable{error}: $langtable{line} $l->{lnum}:",
@@ -684,6 +686,10 @@ sub Assemble {
 		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
 		print OSF join("\t",($l->{lnum},sprintf("%08x",$l->{addr}),$label,$opname,$linearg),$l->{byte}) . "\n" ;
 			print OBF $l->{dat};
+		}
+		print OSF "Symbols:\n";
+		foreach my $l (keys %symtable) {
+			printf OSF "%08x  %s\n",$symtable{$l}{val},$l
 		}
 	}
 	close ISF;
