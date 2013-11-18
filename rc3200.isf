@@ -1,7 +1,7 @@
 # Comment
 <HEAD>
 ISN:"RC3200"
-ISD:"RC3200 CPU Instruction set from doc 0.6b"
+ISD:"RC3200 CPU Instruction set from doc 0.7"
 # endian-ness LE (little endian), BE (big endian), NE (endianless i.e. PY
 CPUE:LE
 # memory word size
@@ -12,72 +12,73 @@ CPUW:32
 FILEE:LE
 # file word size
 FILEW:8
+ALIGN:4
 </HEAD>
 <REG>
-# attribs set Index 32 bit,Data 32 bit,ecode Length 5 (bits),Name"R"
+# attribs set Index 32 bit,Data 32 bit,encode Length 5 (bits),Name"R"
 # name defines which encoding to use, must be unique
 +I32,D32,L5,N"R"
 # name[,alias]:<encoding>
 # # dec, compacted into minimum bits (using current alignment)
 # 0x# hex, each nibble adds 4 bits
 # %# bin, each bit is a bit
-%r0,r0:%00000
-%r1,r1:%00001
-%r2,r2:%00010
-%r3,r3:%00011
-%r4,r4:%00100
-%r5,r5:%00101
-%r6,r6:%00110
-%r7,r7:%00111
-%r8,r8:%01000
-%r9,r9:%01001
-%r10,r10:%01010
-%r11,r11:%01011
-%r12,r12:%01100
-%r13,r13:%01101
-%r14,r14,%bp,bp:%01110
-%r15,r15,%sp,sp:%01111
-%r16:%10000
-%r17:%10001
-%r18:%10010
-%r19:%10011
-%r20:%10100
-%r21:%10101
-%r22:%10110
-%r23:%10111
-%r24:%11000
-%r25:%11001
-%r26:%11010
-%r27:%11011
-%r28:%11100
-%r29:%11101
-%r30:%11110
-%r31:%11111
+%r0,%R0:%00000
+%r1,%R1:%00001
+%r2,%R2:%00010
+%r3,%R3:%00011
+%r4,%R4:%00100
+%r5,%R5:%00101
+%r6,%R6:%00110
+%r7,%R7:%00111
+%r8,%R8:%01000
+%r9,%R9:%01001
+%r10,%R10:%01010
+%r11,%R11:%01011
+%r12,%R12:%01100
+%r13,%R13:%01101
+%r14,%R14:%01110
+%r15,%R15:%01111
+%r16,%R16:%10000
+%r17,%R17:%10001
+%r18,%R18:%10010
+%r19,%R19:%10011
+%r20,%R20:%10100
+%r21,%R21:%10101
+%r22,%R22:%10110
+%r23,%R23:%10111
+%r24,%R24:%11000
+%r25,%R25:%11001
+%r26,%R26:%11010
+%r27,%R27,%y,%Y:%11011
+%r28,%R28,%ia,%IA:%11100
+%r29,%R29,%flags,%FLAGS:%11101
+%r30,%R30,%bp,%BP:%11110
+%r31,%R31,%sp,%SP:%11111
 # attrib set Special 32 bit, encode Length 5 bits
 # Special reserves the names, they may or may not have encodings
 +S32,L5
-flags
-y
-ia
-pc
+%pc
 </REG>
 <LIT>
-# set Name"NAME", Length 5 bits
-+N"L",L5
+# set Name"NAME", Length 13 bits
++N"IN3",L13
 # <num>[,<rangeend>]:<encoding>[:<extended encoding>]
   # Encoding can be number, range or special
 	# * first match any number
 # * encode number verbatum
--15,15:*
+-4095,4095:*
 # special encoding
 # encode all numbers as 0x10, +A append L32 bits, * encode in that
-*:%10000:+AL32*
-+N"L2",L10 FR
--511,511:*
-*:%10+0x00:+AL32*
-+N"L3",L15 FR
--16383,16383:*
-*:%100+0x000:+AL32*
+*:%1000000000000:+AL32* 
+# set Name"NAME", Length 13 bits
+# inmediate for P2
++N"IN2",L18
+-131071,131071:*
+*:%100000000000000000:+AL32*
+# inmediate for P1
++N"IN1",L23
+-4194303,4194303:*
+*:%10000000000000000000000:+AL32*
 </LIT>
 <OPCODE>
 # "NAME":params[,params...]:"paramformat":encoding
@@ -89,170 +90,171 @@ pc
 
 # Memory Opcodes and aliases
 # There are no opcodes persey without a literal, so a literal of zero is implied for convience
-LOAD:3:"R,R+R":L32 0xD000+%0+\3+\2+\1
-LOAD:2:"R,R":L32 0xD000+%1+\2+%00000+\1
-LOAD:3:"R,R+L":L32 0xD000+%1+\2+\3+\1
-LOAD.W:3:"R,R+R":L32 FL 0xD001+%0+\3+\2+\1
-LOAD.W:2:"R,R":L32 FL 0xD001+%1+\2+%00000+\1
-LOAD.W:3:"R,R+L":L32 FL 0xD001+%1+\2+\3+\1
-LOAD.B:3:"R,R+R":L32 FL 0xD002+%0+\3+\2+\1
-LOAD.B:2:"R,R":L32 FL 0xD002+%1+\2+%00000+\1
-LOAD.B:3:"R,R+L":L32 FL 0xD002+%1+\2+\3+\1
-LOAD:2:"R,L2":L32 0x9000+%1+\2+\1
-LOAD.W:2:"R,L2":L32 0x9001+%1+\2+\1
-LOAD.B:2:"R,L2":L32 0x9002+%1+\2+\1
-# alt form for load: some people* like using the asm indirect []
-# these make it legal alternate syntax
-LOAD:3:"R,[R+R]":L32 0xD000+%0+\3+\2+\1
-LOAD:2:"R,[R]":L32 0xD000+%1+\2+%00000+\1
-LOAD:3:"R,[R+L]":L32 0xD000+%1+\2+\3+\1
-LOAD.W:3:"R,[R+R]":L32 FL 0xD001+%0+\3+\2+\1
-LOAD.W:2:"R,[R]":L32 FL 0xD001+%1+\2+%00000+\1
-LOAD.W:3:"R,[R+L]":L32 FL 0xD001+%1+\2+\3+\1
-LOAD.B:3:"R,[R+R]":L32 FL 0xD002+%0+\2+\3+\1
-LOAD.B:2:"R,[R]":L32 FL 0xD002+%1+\2+%00000+\1
-LOAD.B:3:"R,[R+L]":L32 FL 0xD002+%1+\2+\3+\1
-LOAD:2:"R,[L2]":L32 0x9000+%1+\2+\1
-LOAD.W:2:"R,[L2]":L32 0x9001+%1+\2+\1
-LOAD.B:2:"R,[L2]":L32 0x9002+%1+\2+\1
-# Store
-STORE:3:"R+R,R":L32 0xD003+%0+\1+\2+\3
-STORE:2:"R,R":L32 0xD003+%1+\1+%00000+\2
-# backwards forms
-#STORE:2:"R,[R]":L32 0xD003+%1+\2+%00000+\1
-STORE:3:"R+L,R":L32 0xD003+%1+\1+\2+\3
-STORE.W:3:"R+R,R":L32 FL 0xD004+%0+\1+\2+\3
-STORE.W:2:"R,R":L32 FL 0xD004+%1+\1+%00000+\2
-#STORE.W:2:"R,[R]":L32 FL 0xD004+%1+\2+%00000+\1
-STORE.W:3:"R+L,R":L32 FL 0xD004+%1+\1+\2+\3
-STORE.B:3:"R+R,R":L32 FL 0xD005+%0+\1+\2+\3
-STORE.B:2:"R,R":L32 FL 0xD005+%1+\1+%00000+\2
-#STORE.B:2:"R,[R]":L32 FL 0xD005+%1+\2+%00000+\1
-STORE.B:3:"R+L,R":L32 FL 0xD005+%1+\1+\2+\3
-STORE:2:"L2,R":L32 0x9003+%1+\1+\2
-STORE.W:2:"L2,R":L32 0x9004+%1+\1+\2
-STORE.B:2:"L2,R":L32 0x9005+%1+\1+\2
-#STORE:2:"R,[L2]":L32 0x9003+%1+\2+\1
-#STORE.W:2:"R,[L2]":L32 0x9004+%1+\2+\1
-#STORE.B:2:"R,[L2]":L32 0x9005+%1+\2+\1
-# Alt form
-STORE:3:"[R+R],R":L32 0xD003+%0+\1+\2+\3
-STORE:2:"[R],R":L32 0xD003+%1+\1+%00000+\2
-STORE:3:"[R+L],R":L32 0xD003+%1+\1+\2+\3
-STORE.W:3:"[R+R],R":L32 FL 0xD004+%0+\1+\2+\3
-STORE.W:2:"[R],R":L32 FL 0xD004+%1+\1+%00000+\2
-STORE.W:3:"[R+L],R":L32 FL 0xD004+%1+\1+\2+\3
-STORE.B:3:"[R+R],R":L32 FL 0xD005+%0+\1+\2+\3
-STORE.B:2:"[R],R":L32 FL 0xD005+%1+\1+%00000+\2
-STORE.B:3:"[R+L],R":L32 FL 0xD005+%1+\1+\2+\3
-STORE:2:"[L2],R":L32 0x9003+%1+\1+\2
-STORE.W:2:"[L2],R":L32 0x9004+%1+\1+\2
-STORE.B:2:"[L2],R":L32 0x9005+%1+\1+\2
-# class 3 opcodes
-ADD:3:"R,R,R":L32 0xC000+%0+\2+\3+\1
-ADD:3:"R,R,L":L32 0xC000+%1+\2+\3+\1
-SUB:3:"R,R,R":L32 0xC001+%0+\2+\3+\1
-SUB:3:"R,R,L":L32 0xC001+%1+\2+\3+\1
-ADDC:3:"R,R,R":L32 0xC002+%0+\2+\3+\1
-ADDC:3:"R,R,L":L32 0xC002+%1+\2+\3+\1
-SUBC:3:"R,R,R":L32 0xC003+%0+\2+\3+\1
-SUBC:3:"R,R,L":L32 0xC003+%1+\2+\3+\1
-AND:3:"R,R,R":L32 0xC004+%0+\2+\3+\1
-AND:3:"R,R,L":L32 0xC004+%1+\2+\3+\1
-OR:3:"R,R,R":L32 0xC005+%0+\2+\3+\1
-OR:3:"R,R,L":L32 0xC005+%1+\2+\3+\1
-XOR:3:"R,R,R":L32 0xC006+%0+\2+\3+\1
-XOR:3:"R,R,L":L32 0xC006+%1+\2+\3+\1
-NAND:3:"R,R,R":L32 0xC007+%0+\2+\3+\1
-NAND:3:"R,R,L":L32 0xC007+%1+\2+\3+\1
-SLL:3:"R,R,R":L32 0xC008+%0+\2+\3+\1
-SLL:3:"R,R,L":L32 0xC008+%1+\2+\3+\1
-SRL:3:"R,R,R":L32 0xC009+%0+\2+\3+\1
-SRL:3:"R,R,L":L32 0xC009+%1+\2+\3+\1
-SRA:3:"R,R,R":L32 0xC00A+%0+\2+\3+\1
-SRA:3:"R,R,L":L32 0xC00A+%1+\2+\3+\1
-ROTL:3:"R,R,R":L32 0xC00B+%0+\2+\3+\1
-ROTL:3:"R,R,L":L32 0xC00B+%1+\2+\3+\1
-ROTR:3:"R,R,R":L32 0xC00C+%0+\2+\3+\1
-ROTR:3:"R,R,L":L32 0xC00C+%1+\2+\3+\1
-UMUL:3:"R,R,R":L32 0xC00D+%0+\2+\3+\1
-UMUL:3:"R,R,L":L32 0xC00D+%1+\2+\3+\1
-UDIV:3:"R,R,R":L32 0xC00E+%0+\2+\3+\1
-UDIV:3:"R,R,L":L32 0xC00E+%1+\2+\3+\1
-MUL:3:"R,R,R":L32 0xC00F+%0+\2+\3+\1
-MUL:3:"R,R,L":L32 0xC00F+%1+\2+\3+\1
-DIV:3:"R,R,R":L32 0xC010+%0+\2+\3+\1
-DIV:3:"R,R,L":L32 0xC010+%1+\2+\3+\1
-# class 2 opcodes
-CPY:2:"R,R":L32 0x8000+%000000+\2+\1
-SET:2:"R,L2":L32 0x8000+%1+\2+\1
-SWP:2:"R,R":L32 0x8001+%000000+\2+\1
-IFEQ:2:"R,R":L32 0xA000+%000000+\1+\2
-IFEQ:2:"L2,R":L32 0xA000+%1+\1+\2
-IFEQ:2:"R,L2":L32 0xA000+%1+\2+\1
-IFNEQ:2:"R,R":L32 0xA001+%000000+\1+\2
-IFNEQ:2:"R,L2":L32 0xA001+%1+\2+\1
-IFNEQ:2:"L2,R":L32 0xA001+%1+\1+\2
-# TODO make more psudo ops for compares
-IFG:2:"R,R":L32 0xA002+%000000+\1+\2
-IFG:2:"L2,R":L32 0xA002+%1+\1+\2
-IFUG:2:"R,R":L32 0xA003+%000000+\1+\2
-IFUG:2:"L2,R":L32 0xA003+%1+\1+\2
-IFGE:2:"R,R":L32 0xA004+%000000+\1+\2
-IFGE:2:"L2,R":L32 0xA004+%1+\1+\2
-IFUGE:2:"R,R":L32 0xA005+%000000+\1+\2
-IFUGE:2:"L2,R":L32 0xA005+%1+\1+\2
-IFL:2:"R,R":L32 0xA006+%000000+\1+\2
-IFL:2:"L2,R":L32 0xA006+%1+\1+\2
-IFUL:2:"R,R":L32 0xA007+%000000+\1+\2
-IFUL:2:"L2,R":L32 0xA007+%1+\1+\2
-IFLE:2:"R,R":L32 0xA008+%000000+\1+\2
-IFLE:2:"L2,R":L32 0xA008+%1+\1+\2
-IFULE:2:"R,R":L32 0xA009+%000000+\1+\2
-IFULE:2:"L2,R":L32 0xA009+%1+\1+\2
-IFBITS:2:"R,R":L32 0xA00A+%000000+\1+\2
-IFBITS:2:"L2,R":L32 0xA00A+%1+\1+\2
-IFCLEAR:2:"R,R":L32 0xA00B+%000000+\1+\2
-IFCLEAR:2:"L2,R":L32 0xA00B+%1+\1+\2
-
-JMP:2:"R+R":L32 0xB001+%000000+\1+\2
-JMP:2:"L2+R":L32 0xB001+%1+\1+\2
-JMP:2:"R+L2":L32 0xB001+%1+\2+\1
-CALL:2:"R+R":L32 0xB002+%000000+\1+\2
-CALL:2:"L2+R":L32 0xB002+%1+\1+\2
-CALL:2:"R+L2":L32 0xB002+%1+\2+\1
-# class 1 opcodes
-NOT:1:"R":L32 0x400000+%000+\1
-NEG:1:"R":L32 0x400100+%000+\1
-XCHG:1:"R":L32 0x400200+%000+\1
-XCHG.W:1:"R":L32 0x400300+%000+\1
-SXTBD:1:"R":L32 0x400400+%000+\1
-SXTWD:1:"R":L32 0x400500+%000+\1
-GETPC:1:"R":L32 0x400800+%000+\1
-SETFLAGS:1:"R":L32 0x400900+%000+\1
-SETFLAGS:1:"L3":L32 0x4009+%1+\1
-GETFLAGS:1:"R":L32 0x400A00+%000+\1
-SETY:1:"R":L32 0x400B00+%000+\1
-SETY:1:"L3":L32 0x400B+%1+\1
-GETY:1:"R":L32 0x400C00+%000+\1
-SETIA:1:"R":L32 0x400D00+%000+\1
-SETIA:1:"L3":L32 0x400D+%1+\1
-GETIA:1:"R":L32 0x400E00+%000+\1
-PUSH:1:"R":L32 0x500600+%000+\1
-PUSH:1:"L3":L32 0x5006+%1+\1
-POP:1:"R":L32 0x500700+%000+\1
-INT:1:"R":L32 0x700000+%000+\1
-INT:1:"L3":L32 0x7000+%1+\1
-JMP:1,r:"R":L32 0x700100+%000+\1
-JMP:1,r:"L3":L32 0x7001+%1+\1
-CALL:1,r:"R":L32 0x700200+%000+\1
-CALL:1,r:"L3":L32 0x7002+%1+\1
-# class 0 opcodes
+# Type + Opcode + M bit + paramaters
+# 
+# -- RAM r/w instructions
+LOAD:3:"R,R+R":L32          0x60+%0+0x00+\3+\2+\1
+LOAD:3:"R,R+IN3":L32        0x60+%1+\3+\2+\1
+LOAD:3:"R,[R+R]":L32        0x60+%0+0x00+\3+\2+\1
+LOAD:3:"R,[R+IN3]":L32      0x60+%1+\3+\2+\1
+LOAD:2:"R,R":L32            0xC0+%0+0x000+%0+\2+\1
+LOAD:2:"R,IN2":L32          0xC0+%1+\2+\1
+LOAD:2:"R,[R]":L32          0xC0+%0+0x000+%0+\2+\1
+LOAD:2:"R,[IN2]":L32        0xC0+%1+\2+\1
+# 
+LOAD.W:3:"R,R+R":L32        0x61+%0+0x00+\3+\2+\1
+LOAD.W:3:"R,R+IN3":L32      0x61+%1+\3+\2+\1
+LOAD.W:3:"R,[R+R]":L32      0x61+%0+0x00+\3+\2+\1
+LOAD.W:3:"R,[R+IN3]":L32    0x61+%1+\3+\2+\1
+LOAD.W:2:"R,R":L32          0xC1+%0+0x000+%0+\2+\1
+LOAD.W:2:"R,IN2":L32        0xC1+%1+\2+\1
+LOAD.W:2:"R,[R]":L32        0xC1+%0+0x000+%0+\2+\1
+LOAD.W:2:"R,[IN2]":L32      0xC1+%1+\2+\1
+# 
+LOAD.B:3:"R,R+R":L32        0x62+%0+0x00+\3+\2+\1
+LOAD.B:3:"R,R+IN3":L32      0x62+%1+\3+\2+\1
+LOAD.B:3:"R,[R+R]":L32      0x62+%0+0x00+\3+\2+\1
+LOAD.B:3:"R,[R+IN3]":L32    0x62+%1+\3+\2+\1
+LOAD.B:2:"R,R":L32          0xC2+%0+0x000+%0+\2+\1
+LOAD.B:2:"R,IN2":L32        0xC2+%1+\2+\1
+LOAD.B:2:"R,[R]":L32        0xC2+%0+0x000+%0+\2+\1
+LOAD.B:2:"R,[IN2]":L32      0xC2+%1+\2+\1
+# 
+STORE:3:"R+R,R":L32         0x64+%0+0x00+\2+\1+\3
+STORE:3:"R+IN3,R":L32       0x64+%1+\2+\1+\3
+STORE:3:"[R+R],R":L32       0x64+%0+0x00+\2+\1+\3
+STORE:3:"[R+IN3],R":L32     0x64+%1+\2+\1+\3
+STORE:2:"R,R":L32           0xC4+%0+0x000+%0+\1+\2
+STORE:2:"IN2,R":L32         0xC4+%1+\1+\2
+STORE:2:"[R],R":L32         0xC4+%0+0x000+%0+\1+\2
+STORE:2:"[IN2],R":L32       0xC4+%1+\1+\2
+# 
+STORE.W:3:"R+R,R":L32       0x65+%0+0x00+\2+\1+\3
+STORE.W:3:"R+IN3,R":L32     0x65+%1+\2+\1+\3
+STORE.W:3:"[R+R],R":L32     0x65+%0+0x00+\2+\1+\3
+STORE.W:3:"[R+IN2],R":L32   0x65+%1+\2+\1+\3
+STORE.W:2:"R,R":L32         0xC5+%0+0x000+%0+\1+\2
+STORE.W:2:"IN2,R":L32       0xC5+%1+\1+\2
+STORE.W:2:"[R],R":L32       0xC5+%0+0x000+%0+\1+\2
+STORE.W:2:"[IN2],R":L32     0xC5+%1+\1+\2
+# 
+STORE.B:3:"R+R,R":L32       0x66+%0+0x00+\2+\1+\3
+STORE.B:3:"R+IN3,R":L32     0x66+%1+\2+\1+\3
+STORE.B:3:"[R+R],R":L32     0x66+%0+0x00+\2+\1+\3
+STORE.B:3:"[R+IN3],R":L32   0x66+%1+\2+\1+\3
+STORE.B:2:"R,R":L32         0xC6+%0+0x000+%0+\1+\2
+STORE.B:2:"IN2,R":L32       0xC6+%1+\1+\2
+STORE.B:2:"[R],R":L32       0xC6+%0+0x000+%0+\1+\2
+STORE.B:2:"[IN2],R":L32     0xC6+%1+\1+\2
+# -- Register manipulation Instructions
+MOV:2:"R,R":L32             0x80+%0+0x000+%0+\2+\1
+MOV:2:"R,IN2":L32           0x80+%1+\2+\1
+#MOV:2:"R,IN2":L32           0x80+%1+\2+\1
+SWP:2:"R,R":L32             0x81+%0+0x000+%0+\2+\1
+# 
+SIGXB:2:"R,R":L32           0x82+%0+0x000+%0+\2+\1
+SIGXW:2:"R,IN2":L32         0x83+%1+\2+\1
+# 
+XCHGB:1:"R":L32             0x200000+%000+\1
+XCHGW:1:"R":L32             0x210000+%000+\1
+GETPC:1:"R":L32             0x220000+%000+\1
+#
+# -- ALU Instructions
+# Bitwise boolean
+AND:3:"R,R,R":L32           0x40+%0+0x00+\3+\2+\1
+AND:3:"R,R,IN3":L32         0x40+%1+\3+\2+\1
+OR:3:"R,R,R":L32            0x41+%0+0x00+\3+\2+\1
+OR:3:"R,R,IN3":L32          0x41+%1+\3+\2+\1
+XOR:3:"R,R,R":L32           0x42+%0+0x00+\3+\2+\1
+XOR:3:"R,R,IN3":L32         0x42+%1+\3+\2+\1
+BITC:3:"R,R,R":L32          0x43+%0+0x00+\3+\2+\1
+BITC:3:"R,R,IN3":L32        0x43+%1+\3+\2+\1
+NOT:2:"R,R":L32             0x84+%0+0x000+%0+\2+\1
+NOT:2:"R,IN2":L32           0x84+%1+\2+\1
+# Addition/subtraction
+ADD:3:"R,R,R":L32           0x44+%0+0x00+\3+\2+\1
+ADD:3:"R,R,IN3":L32         0x44+%1+\3+\2+\1
+ADDC:3:"R,R,R":L32          0x45+%0+0x00+\3+\2+\1
+ADDC:3:"R,R,IN3":L32        0x45+%1+\3+\2+\1
+SUB:3:"R,R,R":L32           0x46+%0+0x00+\3+\2+\1
+SUB:3:"R,R,IN3":L32         0x46+%1+\3+\2+\1
+SUBB:3:"R,R,R":L32          0x47+%0+0x00+\3+\2+\1
+SUBB:3:"R,R,IN3":L32        0x47+%1+\3+\2+\1
+RSB:3:"R,R,R":L32           0x48+%0+0x00+\3+\2+\1
+RSB:3:"R,R,IN3":L32         0x48+%1+\3+\2+\1
+RSBB:3:"R,R,R":L32          0x49+%0+0x00+\3+\2+\1
+RSBB:3:"R,R,IN3":L32        0x49+%1+\3+\2+\1
+# Shifts and rotations
+LLS:3:"R,R,R":L32           0x4A+%0+0x00+\3+\2+\1
+LLS:3:"R,R,IN3":L32         0x4A+%1+\3+\2+\1
+LRS:3:"R,R,R":L32           0x4B+%0+0x00+\3+\2+\1
+LRS:3:"R,R,IN3":L32         0x4B+%1+\3+\2+\1
+ARS:3:"R,R,R":L32           0x4C+%0+0x00+\3+\2+\1
+ARS:3:"R,R,IN3":L32         0x4C+%1+\3+\2+\1
+ROTL:3:"R,R,R":L32          0x4D+%0+0x00+\3+\2+\1
+ROTL:3:"R,R,IN3":L32        0x4D+%1+\3+\2+\1
+ROTR:3:"R,R,R":L32          0x4E+%0+0x00+\3+\2+\1
+ROTR:3:"R,R,IN3":L32        0x4E+%1+\3+\2+\1
+# Multiplication and division
+MUL:3:"R,R,R":L32           0x50+%0+0x00+\3+\2+\1
+MUL:3:"R,R,IN3":L32         0x50+%1+\3+\2+\1
+SMUL:3:"R,R,R":L32          0x51+%0+0x00+\3+\2+\1
+SMUL:3:"R,R,IN3":L32        0x51+%1+\3+\2+\1
+DIV:3:"R,R,R":L32           0x52+%0+0x00+\3+\2+\1
+DIV:3:"R,R,IN3":L32         0x52+%1+\3+\2+\1
+SDIV:3:"R,R,R":L32          0x53+%0+0x00+\3+\2+\1
+SDIV:3:"R,R,IN3":L32        0x53+%1+\3+\2+\1
+# -- Skip Instructions
+IFEQ:2:"R,R":L32            0xA0+%0+0x000+%0+\2+\1
+IFEQ:2:"R,IN2":L32          0xA0+%1+\2+\1
+IFNEQ:2:"R,R":L32           0xA1+%0+0x000+%0+\2+\1
+IFNEQ:2:"R,IN2":L32         0xA1+%1+\2+\1
+#
+IFL:2:"R,R":L32             0xA2+%0+0x000+%0+\2+\1
+IFL:2:"R,IN2":L32           0xA2+%1+\2+\1
+IFSL:2:"R,R":L32            0xA3+%0+0x000+%0+\2+\1
+IFSL:2:"R,IN2":L32          0xA3+%1+\2+\1
+IFLE:2:"R,R":L32            0xA4+%0+0x000+%0+\2+\1
+IFLE:2:"R,IN2":L32          0xA4+%1+\2+\1
+IFSLE:2:"R,R":L32           0xA5+%0+0x000+%0+\2+\1
+IFSLE:2:"R,IN2":L32         0xA5+%1+\2+\1
+#
+IFBITS:2:"R,R":L32          0xA6+%0+0x000+%0+\2+\1
+IFBITS:2:"R,IN2":L32        0xA6+%1+\2+\1
+IFCLEAR:2:"R,R":L32         0xA7+%0+0x000+%0+\2+\1
+IFCLEAR:2:"R,IN2":L32       0xA7+%1+\2+\1
+# -- JUMP/CALL
+# Jumps
+JMP:2:"R+R":L32             0xE0+%0+0x000+%0+\2+\1
+JMP:2:"R+IN2":L32           0xE0+%1+\2+\1
+JMP:2:"IN2+R":L32           0xE0+%1+\1+\2
+JMP:1:"R":L32               0x380000+%000+\1
+JMP:1:"IN1":L32              0x38+%1+\1
+# Relative Jumps
+RJMP:1,r:"R":L32            0x3A0000+%000+\1
+RJMP:1,r:"IN1":L32           0x3A+%1+\1
+# Call
+CALL:2:"R+R":L32            0xE1+%0+0x000+%0+\2+\1
+CALL:2:"R+IN2":L32          0xE1+%1+\2+\1
+CALL:2:"IN2+R":L32          0xE1+%1+\1+\2
+CALL:1:"R":L32              0x390000+%000+\1
+CALL:1:"IN1":L32             0x39+%1+\1
+# Relative Calls
+RCALL:1,r:"R":L32           0x3B0000+%000+\1
+RCALL:1,r:"IN1":L32          0x3B+%1+\1
+# Return
+RET:0::L32 +0x00000004
+# -- STACK
+POP:1:"R":L32               0x290000+%000+\1
+PUSH:1:"R":L32              0x2A0000+%000+\1
+PUSH:1:"IN1":L32             0x2A+%1+\1
+# -- Interrupts
+INT:1:"R":L32               0x3C0000+%000+\1
+INT:1:"IN1":L32              0x3C+%1+\1
+RFI:0::L32 +0x00000005
+# -- Special and others
 SLEEP:0::L32 +0x00000000
-NOP:0::L32 +0x00000001
-RFI:0::L32 +0x30000003
-RET:0::L32 +0x30000004
-IFOF:0::L32 +0x20000000
-IFCF:0::L32 +0x20000001
+# Pseudo instruction -> NOP is AND %r0, %r0, %r0
+NOP:0::L32 +0x40000000
 </OPCODE>
 
