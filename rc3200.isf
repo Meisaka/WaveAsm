@@ -69,7 +69,7 @@ ALIGN:4
 -4095,4095:*
 # special encoding
 # encode all numbers as 0x10, +A append L32 bits, * encode in that
-*:%10000000000000:+AL32*
+*:%1000000000000:+AL32* 
 # set Name"NAME", Length 13 bits
 # inmediate for P2
 +N"IN2",L18
@@ -197,8 +197,12 @@ ROTR:3:"R,R,R":L32          0x4E+%0+0x00+\3+\2+\1
 ROTR:3:"R,R,IN3":L32        0x4E+%1+\3+\2+\1
 # Multiplication and division
 MUL:3:"R,R,R":L32           0x50+%0+0x00+\3+\2+\1
+MUL:3:"R,R,IN3":L32         0x50+%1+\3+\2+\1
+SMUL:3:"R,R,R":L32          0x51+%0+0x00+\3+\2+\1
 SMUL:3:"R,R,IN3":L32        0x51+%1+\3+\2+\1
 DIV:3:"R,R,R":L32           0x52+%0+0x00+\3+\2+\1
+DIV:3:"R,R,IN3":L32         0x52+%1+\3+\2+\1
+SDIV:3:"R,R,R":L32          0x53+%0+0x00+\3+\2+\1
 SDIV:3:"R,R,IN3":L32        0x53+%1+\3+\2+\1
 # -- Skip Instructions
 IFEQ:2:"R,R":L32            0xA0+%0+0x000+%0+\2+\1
