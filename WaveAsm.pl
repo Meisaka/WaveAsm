@@ -2,7 +2,7 @@
 # Multiwave Assembler
 #
 use strict;
-my $instructionsetfile = "rc3200.v7.isf";
+my $instructionsetfile = "rc3200.isf";
 
 my %langtable = ( fileof1 => "Failed to open file: ", fileof2 => "",
 	error => "Error", line => "Line",

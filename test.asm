@@ -26,85 +26,232 @@ begin:
         MOV %r24, 24
         MOV %r25, 25
         MOV %r26, 26
-        MOV %r27, 27
+        MOV %r27, 27        ; This are special registers!
         MOV %r28, 28
         MOV %r29, 29
         MOV %r30, 30
-        MOV %r31, 31        ; Addr: 084h
-        MOV %r30, 0        
-        MOV %r31, 0        
+        MOV %r31, 31        ; Addr: 07Ch
+        MOV %bp, 0        
+        MOV %sp, 0x30000    ; Sets Stack Pointer to the end of the 128KiB RAM     
+        MOV %ia, 0                 
+        MOV %flags, 0                 
         MOV %r1, 0xBEBECAFE   
         ; Tested seting registers and using bit literal
 
-        MOV %r10 , %r1      ; Addr 090h
-        NOT %r0, %r0
-        XCHGB %r4
-        XCHGW %r5
+        MOV %r10 , %r1      ; %r10 = 0xBEBECAFE
+        SWP %r7, %r9        ; %r9 = 7 ; %r7 = 9
+        NOT %r0, %r0        ; %r0 = 0xFFFFFFFF = -1
+        XCHGB %r4           ; %r4 = 0x400
+        XCHGW %r5           ; %r5 = 0x50000
 
-        MOV %r7, -1
-        MOV %r6, -2
-        ADD %r12, %r8, %r4 
-        ADD %r0, %r8, 1 
-        SUB %r22, %r22, %r20 
-        SUB %r22, %r24, 4
-        SUB %r22, %r24, -4
+        ;Test IFx operations **************************************************
+test_ifx:                       ; PC = 0x00B0
+        IFEQ %r1, 0         ; %r1 = 0xBEBECAFE, so skips
+            JMP crash
+        IFNEQ %r1, 0xBEBECAFE ; " ", so skips
+            JMP crash
 
-        MOV %r0 , 0         ; Addr 0C0h
-loop:
-        NOP                 ; Addr 0C4h
-        ADD %r0, %r0, 1
+        IFL %r6, %r2        ; 6 < 2 = false, so skips
+            JMP crash
+        IFLE %r6, %r2       ; 6 < 2 = false, so skips
+            JMP crash
 
-        IFL %r0, 10         ; Addr 0CCh
-            JMP loop            ; Jumps to 0C4h
+        IFSL %r2, %r0       ; 2 < -1 = false, so skips
+            JMP crash
+        IFSLE %r2, %r0      ; 2 < -1 = false, so skips
+            JMP crash
 
-end_loop:        
-        MOV %sp, 0x20000    ; (Stack pointer to the last address of RAM)
-    
-        PUSH -13570         ; push 0xFFFFCAFE
-        PUSH %r6
-        POP  %r29
-        POP  %r28           ; Addr 0E8h   %r29 = 0xFFFFCAFE
-    
-        MOV %r0, 2
-        MOV %r1, 4
-        CALL function_pow   ; Should return %r0 = 2^4 = 16
+        IFBITS %r4, 0x404   ; (0x400 & 0x404) != 0 so execute
+            JMP next
+        JMP crash
 
-        JMP begin           ; Jumps to 0
-table:  .DAT 0x55,0x1234,65,33,12
-        .DAT 4,0xAA,2,0x12345678
-	; Test align function
-	; .DAT 0x00, 0x00, 0x00   ; Padding
-        MOV %r11, 0x11
+next:        
+        IFCLEAR %r4, 0x404  ; (0x400 & 0x404) != 0 so skips
+            JMP crash
+
+        IFEQ %r1, 0         ; False, so must skip
+            IFNEQ %r1, 0              ; True but is Chained and skiped
+                IFEQ %r1, 0xBEBACAFE  ; True but is Chained and skiped
+                    JMP crash         ; This never should be executed
+
+        ; Test ALU operations *************************************************
+test_alu:                       ; PC = 0x010C
+        ; Testing BOOLEAN instructions
+        MOV %r7, 0x5555AAAA
+        MOV %r6, 0xAAFFFF55
+        NOT %r12, %r6           ; %r12 = 0x550000AA
+        IFNEQ %r12, 0x550000AA
+            JMP crash
+
+        AND %r12, %r7, %r6      ; %r12 = 0x0055AA00
+        IFNEQ %r12, 0x0055AA00
+            JMP crash
+
+        OR %r12, %r7, %r6       ; %r12 = 0xFFFFFFFF
+        IFNEQ %r12, 0xFFFFFFFF
+            JMP crash
+
+        XOR %r12, %r7, %r6      ; %r12 = 0xFFAA55FF
+        IFNEQ %r12, 0xFFAA55FF
+            JMP crash
+
+        BITC %r12, %r7, %r6     ; %r12 = 0x550000AA
+        IFNEQ %r12, 0x550000AA
+            JMP crash
+
+        ; Testing Addition/Substraction instructions
+        ADD %r12, %r8, %r4      ; %r12 = %r8 + %r4 = 0x408
+        IFNEQ %r12, 0x408
+            JMP crash
+
+        ADD %r0, %r8, 1         ; %r0 = %r8 +1 = 9
+        IFNEQ %r0, 9
+            JMP crash
+        
+        SUB %r22, %r12, %r0     ; %r22 = %r12 - %r0 = 0x3FF
+        IFNEQ %r22, 0x3FF
+            JMP crash
+
+        SUB %r22, %r24, 4       ; %r22 = %r24 -4 = 20 = 0x14
+        IFNEQ %r22, 20
+            JMP crash
+
+        SUB %r22, %r24, -4      ; %r22 = %r24 -(-4) = 28 = 0x1C
+        IFNEQ %r22, 28
+            JMP crash
+
+        RSB %r22, %r24, -4      ; %r22 = -4 - %r24 = -28 = 0xFFFFFFE4
+        IFNEQ %r22, -28
+            JMP crash
+
+        ; Testing Overflow
+        MOV %r22, 0x40000000
+        MOV %r23, 0x60000000
+        ADD %r24, %r22, %r23    ; %r24 = 0x40000000 + 0x60000000 = 0xA0000000 (negative)
+        IFCLEAR %flags, 2       ; If OF == 0 -> Jump to crash
+            JMP crash
+        ; TODO Overflow with substraction
+
+        ; Testing Carry doing 64 bit addition and substraction
+        MOV %r20, 0xFFFFFFFF    ; LSB op1
+        MOV %r21, 0x00000001    ; MSB op1
+        MOV %r22, 0x00000001    ; LSB op2
+        MOV %r23, 0x00000100    ; MSB op2
+        ; Result of addtion must be 0x00000102_00000000
+        ADD %r24, %r20, %r22    ; Adds LSB
+        ADDC %r25, %r21, %r23   ; Adds MSB
+        IFNEQ %r24, 0
+            JMP crash
+        IFNEQ %r25, 0x102
+            JMP crash
+        
+        ; Result of addtion must be 0xFFFFFF01_FFFFFFFE
+        SUB %r24, %r20, %r22    ; Subs LSB
+        SUBB %r25, %r21, %r23   ; Subs MSB
+        IFNEQ %r24, 0xFFFFFFFE
+            JMP crash
+        IFNEQ %r25, 0xFFFFFF01
+            JMP crash
+
+        ; Testing Shift instructions
+        ; %r6 = 0xAAFFFF55
+        LLS %r12, %r6, 8        ; %r12 = 0xFFFF5500
+        IFNEQ %r12, 0xFFFF5500
+            JMP crash
+
+        LRS %r12, %r6, 8        ; %r12 = 0x00AAFFFF
+        IFNEQ %r12, 0x00AAFFFF
+            JMP crash
+        
+        ARS %r12, %r6, 8        ; %r12 = 0xFFAAFFFF
+        IFNEQ %r12, 0xFFAAFFFF
+            JMP crash
+        ARS %r12, %r7, 8        ; %r12 = 0x005555AA
+        IFNEQ %r12, 0x005555AA
+            JMP crash
+
+        ROTL %r12, %r6, 8       ; %r12 = 0xFFFF55AA
+        IFNEQ %r12, 0xFFFF55AA
+            JMP crash
+
+        ROTR %r12, %r6, 8       ; %r12 = 0x55AAFFFF
+        IFNEQ %r12, 0x55AAFFFF
+            JMP crash
+
+        ; Testing Multiplication/Division
+        MOV %r22, 100
+        MOV %r23, 4000000001
+        MUL %r24, %r23, %r22     ; %y:%r24 = 400000000100
+        IFNEQ %r24, 0x21DBA064
+            JMP crash
+        IFNEQ %y, 0x5D
+            JMP crash
+
+        DIV %r24, %r23, %r22     ; %r24 = 40000000 ; %y = 1
+        IFNEQ %r24, 0x02625A00
+            JMP crash
+        IFNEQ %y, 1
+            JMP crash
+        ; TODO Signed Multiplication/Division
+        ; TODO Check Division error flag
+
+        ; TODO Check LOAD/STORE
+        ; TODO Check Stack instrucctions
+        ; TODO Check CALL functions
+        ; TODO Check other instrucctions
+
+        CALL print_ok
+
+        LOAD.B %r3, 0x10000     ; Load countervar
+        
+        ADD %r3, %r3, 1
+        DIV %r4, %r3, 10
+        MOV %r3, %y             ; %r3 = %r3 % 10
+
+        STORE.B 0x10000, %r3    ; Stores counter new value TODO Fails
+        
+        ADD %r0, %r3, 0x30      ; + '0'
+        MOV %r1, 0x0100         ; Column 0, Row 1
+        MOV %r2, 0x70           ; Light gray paper, black Ink
+        CALL print_chr
 
 
-; Function naive interger power
-; Params :
-;  %r0 base
-;  %r1 poitive exponent
-; Return :
-;  %r0 = base ^ exponent
-function_pow:
-        PUSH %r4
-        PUSH %r5
-        PUSH %y
-        PUSH %flags
+        
+        JMP begin               ; Begin again in a endless loop
+crash:
+        SLEEP               ; Sleeps because something goes wrong
 
-        MOV %r4, 0
-        MOV %r5, %r0
-        MOV %r0, 1              ; x^0 = 1
-    
-function_pow_beginloop:
-        IFLE %r1, %r4            ; While %r1 >= %r4 (exponent >= counter)
-            RJMP function_pow_endloop
-        MUL %r0, %r0, %r5       ; %r0 = %r0 * base
-        ADD %r4, %r4, 1         ; %r4++
-        RJMP function_pow_beginloop
 
-function_pow_endloop:
+; *****************************************************************************
+print_ok:                   ; Prints OK in CDA text mode 0
+       MOV %r0, 0
+       STORE.B 0xFF0ACC00, %r0 ; Text mode 0, default font and palette, no vsync
+       
+       MOV %r0, 0x0F6B0A4F
+       STORE 0xFF0A0000, %r0   ; Writes Ok in VRRAM
 
-        POP %flags
-        POP %y
-        POP %r5
-        POP %r4
+       RET
 
-        RET
+
+; Prints a %r0 digit in screen 0 with textmode 0, at column %r1[0:7], row %r1[8:15]
+;       attribute  %r2
+; Asummes that row < 30 and column < 40
+print_chr:
+      PUSH %r4
+      PUSH %r5
+      AND %r4, %r1, 0x3F          ; Grabs column and puts in %r4
+      LRS %r5, %r1, 8             ; Grabs row and puts in %r5
+      MUL %r5, %r5, 0x28
+      ADD %r4, %r4, %r5           ; %r4 = row*40 + column
+      LLS %r4, %r4, 1             ; %r4 *= 2
+      ADD %r4, %r4 ,0xFF0A0000
+      STORE.B %r4, %r0            ; Write character
+      ADD %r4, %r4, 1
+      STORE.B %r4, %r2            ; Write Attribute
+
+      POP %r5
+      POP %r4
+
+      RET
+
+
