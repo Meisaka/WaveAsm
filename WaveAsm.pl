@@ -135,6 +135,7 @@ sub LoadInstructions {
 	}
 	close ISF;
 }
+
 sub DecodeSymbol {
 	my ($sym, $itr, $rel) = @_;
 	return ("null", undef) if(!defined($sym));
@@ -182,7 +183,65 @@ sub DecodeSymbol {
 			}
 		}
 	}
-	if($sym =~ /^(-*)([0-9]+)$/) {
+	
+  if($sym =~ /^(-*)(0[xX][0-9a-fA-F]+)$/) { # Hexadecimal 0x...
+		$v = oct($2);
+		$v = -$v if(length($1) % 2 == 1);
+		if($itr == -1) {
+			return ("val", undef, $itab, $v);
+		}
+		$v -= ($vpc + $vinstrend) if($rel == 1);
+		for my $r (@littable) {
+			if($ci >= $itr) {
+				if($r->{rl} eq '*') {
+					return ("lit", $r, $itab, $v);
+				} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
+					return ("lit", $r, $itab, $v);
+				}
+			} else {
+				$ci++;
+			}
+		}
+
+	} elsif($sym =~ /^(-*)(0[bB][01]+)$/) { # Binary 0b...
+		$v = oct($2);
+		$v = -$v if(length($1) % 2 == 1);
+		if($itr == -1) {
+			return ("val", undef, $itab, $v);
+		}
+		$v -= ($vpc + $vinstrend) if($rel == 1);
+		for my $r (@littable) {
+			if($ci >= $itr) {
+				if($r->{rl} eq '*') {
+					return ("lit", $r, $itab, $v);
+				} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
+					return ("lit", $r, $itab, $v);
+				}
+			} else {
+				$ci++;
+			}
+		}
+
+	} elsif($sym =~ /^(-*)([0-9a-fA-F]+)([hH])$/) { # Hexadecimal ...h
+		$v = oct("0x" . $2);
+		$v = -$v if(length($1) % 2 == 1);
+		if($itr == -1) {
+			return ("val", undef, $itab, $v);
+		}
+		$v -= ($vpc + $vinstrend) if($rel == 1);
+		for my $r (@littable) {
+			if($ci >= $itr) {
+				if($r->{rl} eq '*') {
+					return ("lit", $r, $itab, $v);
+				} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
+					return ("lit", $r, $itab, $v);
+				}
+			} else {
+				$ci++;
+			}
+		}
+
+	} elsif($sym =~ /^(-*)([0-9]+)$/) { # decimal
 		$v = ($2);
 		$v = -$v if(length($1) % 2 == 1);
 		if($itr == -1) {
@@ -201,25 +260,8 @@ sub DecodeSymbol {
 				$ci++;
 			}
 		}
-	} elsif($sym =~ /^(-*)(0x[0-9a-fA-F]+)$/) {
-		$v = oct($2);
-		$v = -$v if(length($1) % 2 == 1);
-		if($itr == -1) {
-			return ("val", undef, $itab, $v);
-		}
-		$v -= ($vpc + $vinstrend) if($rel == 1);
-		for my $r (@littable) {
-			if($ci >= $itr) {
-				if($r->{rl} eq '*') {
-					return ("lit", $r, $itab, $v);
-				} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
-					return ("lit", $r, $itab, $v);
-				}
-			} else {
-				$ci++;
-			}
-		}
-	}
+
+  }
 	return ("null",undef);
 }
 
