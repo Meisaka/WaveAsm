@@ -33,7 +33,7 @@ my @optable = (
 	{op => '.DD', arc => -1, arf => '*', encode => 'M'}
 );
 
-print STDERR "Wave Asm - version 0.1.4\n";
+print STDERR "Wave Asm - version 0.2.0\n";
 LoadInstructions( $instructionsetfile );
 print STDERR "<optable>\n";
 foreach my $o (@optable) {
@@ -136,12 +136,49 @@ sub LoadInstructions {
 	close ISF;
 }
 
+sub DecodeValue {
+	my ($sym) = @_;
+	my $v;
+	if ($sym =~ /^(')\\(.)\1$/) { # Ascii escaped literal
+		$v = $2;
+		$v =~ tr/nrt0/\x0A\x0D\x09\0/; #translate lf cr tab nul, others as is.
+		$v = ord($v);
+		return $v;
+	} elsif ($sym =~ /^(')([^'\\])\1$/) { # Ascii literal
+		$v = ord($2);
+		return $v;
+	} elsif($sym =~ /^"(.*)"$/) { # String literal (TODO)
+		return undef;
+	} elsif($sym =~ /^(-*)(0[xX][0-9a-fA-F]+)$/) { # Hexadecimal 0x...
+		$v = oct($2);
+		$v = -$v if(length($1) % 2 == 1);
+		return $v;
+	} elsif($sym =~ /^(-*)(0[bB][01]+)$/) { # Binary 0b...
+		$v = oct($2);
+		$v = -$v if(length($1) % 2 == 1);
+		return $v;
+	} elsif($sym =~ /^(-*)([0-9a-fA-F]+)([hH])$/) { # Hexadecimal ...h
+		$v = oct("0x" . $2);
+		$v = -$v if(length($1) % 2 == 1);
+		return $v;
+	} elsif($sym =~ /^(-*)(0[0-7]+)$/) { # octal 0... just in case ;)
+		$v = oct($2);
+		$v = -$v if(length($1) % 2 == 1);
+		return $v;
+	} elsif($sym =~ /^(-*)([0-9]+)$/) { # decimal
+		$v = ($2);
+		$v = -$v if(length($1) % 2 == 1);
+		return $v;
+	}
+	print STDERR "[$sym]UNDEF|";
+	return undef;
+}
+
 sub DecodeSymbol {
 	my ($sym, $itr, $rel) = @_;
 	return ("null", undef) if(!defined($sym));
 	return ("null", undef) if($sym eq "");
 	my $v;
-  my $c;
 	my $itab = @littable;
 	my $ci = 0;
 	for my $r (@regtable) {
@@ -185,117 +222,8 @@ sub DecodeSymbol {
 		}
 	}
 
-  if ($sym =~ /^(\x27)([\x20-\x26\x28-\x7E])(\x27)$/) { # Ascii literal
-		$v = ord($2);
-
-		if($itr == -1) {
-			return ("val", undef, $itab, $v);
-		}
-		$v -= ($vpc + $vinstrend) if($rel == 1);
-		for my $r (@littable) {
-			if($ci >= $itr) {
-				if($r->{rl} eq '*') {
-					return ("lit", $r, $itab, $v);
-				} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
-					return ("lit", $r, $itab, $v);
-				}
-			} else {
-				$ci++;
-			}
-		}
-
-  } elsif ($sym =~ /^(\x27\x5C)([nrt\x27\x220])(\x27)$/) { # Ascii escaped sequences
-    $c = $2;
-    if ($c =~ /^n$/ ) { # Line Feed
-      $v = 0x0A;
-    } elsif ($c =~ /^r$/ ) { # Carriage Return
-      $v = 0x0D;
-    } elsif ($c =~ /^t$/ ) { # Horizontal Tab
-      $v = 0x09;
-    } elsif ($c =~ /^\x27$/ ) { # '
-      $v = 0x27;
-    } elsif ($c =~ /^\x22$/ ) { # "
-      $v = 0x22;
-    } elsif ($c =~ /^0$/ ) { # Null character
-      $v = 0;
-    } 
-
-		if($itr == -1) {
-			return ("val", undef, $itab, $v);
-		}
-		$v -= ($vpc + $vinstrend) if($rel == 1);
-		for my $r (@littable) {
-			if($ci >= $itr) {
-				if($r->{rl} eq '*') {
-					return ("lit", $r, $itab, $v);
-				} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
-					return ("lit", $r, $itab, $v);
-				}
-			} else {
-				$ci++;
-			}
-		}
-
-  } elsif($sym =~ /^(-*)(0[xX][0-9a-fA-F]+)$/) { # Hexadecimal 0x...
-		$v = oct($2);
-		$v = -$v if(length($1) % 2 == 1);
-		if($itr == -1) {
-			return ("val", undef, $itab, $v);
-		}
-		$v -= ($vpc + $vinstrend) if($rel == 1);
-		for my $r (@littable) {
-			if($ci >= $itr) {
-				if($r->{rl} eq '*') {
-					return ("lit", $r, $itab, $v);
-				} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
-					return ("lit", $r, $itab, $v);
-				}
-			} else {
-				$ci++;
-			}
-		}
-
-	} elsif($sym =~ /^(-*)(0[bB][01]+)$/) { # Binary 0b...
-		$v = oct($2);
-		$v = -$v if(length($1) % 2 == 1);
-		if($itr == -1) {
-			return ("val", undef, $itab, $v);
-		}
-		$v -= ($vpc + $vinstrend) if($rel == 1);
-		for my $r (@littable) {
-			if($ci >= $itr) {
-				if($r->{rl} eq '*') {
-					return ("lit", $r, $itab, $v);
-				} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
-					return ("lit", $r, $itab, $v);
-				}
-			} else {
-				$ci++;
-			}
-		}
-
-	} elsif($sym =~ /^(-*)([0-9a-fA-F]+)([hH])$/) { # Hexadecimal ...h
-		$v = oct("0x" . $2);
-		$v = -$v if(length($1) % 2 == 1);
-		if($itr == -1) {
-			return ("val", undef, $itab, $v);
-		}
-		$v -= ($vpc + $vinstrend) if($rel == 1);
-		for my $r (@littable) {
-			if($ci >= $itr) {
-				if($r->{rl} eq '*') {
-					return ("lit", $r, $itab, $v);
-				} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
-					return ("lit", $r, $itab, $v);
-				}
-			} else {
-				$ci++;
-			}
-		}
-
-	} elsif($sym =~ /^(-*)([0-9]+)$/) { # decimal
-		$v = ($2);
-		$v = -$v if(length($1) % 2 == 1);
+	$v = DecodeValue($sym);
+	if (defined($v)) {
 		if($itr == -1) {
 			return ("val", undef, $itab, $v);
 		}
@@ -313,7 +241,7 @@ sub DecodeSymbol {
 			}
 		}
 
-  }
+	}
 	return ("null",undef);
 }
 
@@ -337,7 +265,7 @@ sub DecodeSymbols {
 		#print STDERR "DECARG: '$arg' ";
 		my @lfs = ();
 		my $minus = "";
-		my @wsa = split(" ",$arg);
+		my @wsa = split(/("(?:\\"|[^"])*")|('\\.')|('[^\\]')|([^\\][ \t])|(?:^[ \t])/,$arg);
 		for my $elem (@wsa) {
 			if($elem eq "[") {
 				if($arg !~ /\[.*\]/) {
@@ -356,23 +284,6 @@ sub DecodeSymbols {
 			} elsif($elem eq "-") {
 				$minus = "-";
 				push @lfs, "+";
-			} elsif($elem =~ /^-*[0-9]+$/) {
-				my ($type, $vec, $i, $v) = DecodeSymbol($minus . $elem, $itr,$userel);
-				if($type eq "reg") {
-					push @lfs, $vec->{nam};
-					push @encode, $vec->{encode};
-				} elsif($type eq "lit") {
-					push @lfs, $vec->{nam};
-					push @encode, $vec->{encode} ."+$v";
-					$maxitr = $i;
-				} elsif($type eq "val") {
-					push @encode, "+ALM$ewordsz+$v";
-				} else {
-					push @lfs, "*";
-					push @encode, "+$v";
-					$maxitr = $i;
-				}
-				$minus = "";
 			} else {
 				my ($type, $vec, $i, $v) = DecodeSymbol($minus . $elem, $itr, $userel);
 				if($type eq "reg") {
@@ -384,6 +295,10 @@ sub DecodeSymbols {
 					$maxitr = $i;
 				} elsif($type eq "val") {
 					push @encode, "+ALM$ewordsz+$v";
+				} else {
+					push @lfs, "*";
+					push @encode, "+$v";
+					$maxitr = $i;
 				}
 				$minus = "";
 			}
