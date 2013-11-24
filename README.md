@@ -39,11 +39,30 @@ WaveAsm currently supports 6 macros:
 Note:
 .ORG generates code to run a at specified address, but the binary file is flat, so a relocator or specific load address will be needed.
 
+Numeric Expressions
+----
+Numeric expressions are simple in the current version, they are single values and may be negative.
+The following formats are used for numeric expressions:
+ - 0xnn - Hexadecimal, where nn is any number hex digits.
+ - nnh - Hexadecimal, alternate form.
+ - 0bnn - Binary, nn is any number of bits.
+ - 0nnn - Octal, nnn is any number of octal digits.
+ - nn - Decimal, nn is any number of digits.
+ - 'x' - Character, x is any single character, special escaped values are also supported \n \t \r \0 have standard meanings, use \' to embed the ' value.
+
+Standard Syntax
+----
+WaveAsm uses a common assembly syntax, each line may be blank, a comment, just a label, or full line.
+All labels must appear first on a line, before any white space.
+All instructions must come after label and whitespace, whitespace before the instruction is required.
+Arguments optionally follow the instruction, and are seperated with commas "," or depending on the instruction set, the plus sign "+".
+The exact format of arguments is instruction set specific.
+The default instruction set is [RC3200](https://github.com/Zardoz89/Trillek-Computer/blob/RC3200/RC3200.md).
+
 Known bugs
 ----
-This an early version, so line expressions are very limited and strict.
+This is still an early version, so line expressions are limited and isf syntax is strict.
 Instruction set definitions are not syntax checked, they just define syntax, editing them could cause wierd behavior.
-Numeric expressions are limited to decimal and hex (prefixed with 0x)
 
 Unknown Bugs
 ----
