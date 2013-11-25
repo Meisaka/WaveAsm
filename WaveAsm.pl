@@ -45,8 +45,12 @@ foreach my $o (@regtable) {
 	print STDERR "$o->{reg} $o->{nam} $o->{encode} " if($verbose > 2);
 }
 foreach(@ARGV) {
-	if(/^--/) {
-	} elsif (/^-/) {
+	if(/^--(.*)/) {
+	} elsif (/^-(.*)/) {
+		my $flags = $1;
+		if($flags =~ /([Vv]*)/) {
+			$verbose += length($1);
+		}
 	} else {
 		@allfile = (); # clear file
 		%symtable = ();
@@ -140,6 +144,7 @@ sub LoadInstructions {
 sub DecodeValue {
 	my ($sym) = @_;
 	my $v;
+	my @v;
 	if ($sym =~ /^(')\\(.)\1$/) { # Ascii escaped literal
 		$v = $2;
 		$v =~ tr/nrt0/\x0A\x0D\x09\0/; #translate lf cr tab nul, others as is.
@@ -154,6 +159,13 @@ sub DecodeValue {
 		$v =~ s/\\n/\n/g;
 		$v =~ s/\\t/\t/g;
 		$v =~ s/\\0/\0/g;
+		$v =~ s/\\(.)/\1/g;
+		@v = split('',$v);
+		print STDERR "[STR:\"$v\"]" if($verbose > 5);
+		$v = "";
+		foreach my $c (@v) {
+			$v .= "+". ord($c);
+		}
 		return ("str",$v);
 	} elsif($sym =~ /^(-*)(0[xX][0-9a-fA-F]+)$/) { # Hexadecimal 0x...
 		$v = oct($2);
@@ -247,7 +259,11 @@ sub DecodeSymbol {
 				$ci++;
 			}
 		}
-
+	}
+	if ($vt eq "str") {
+		if($itr == -1) {
+			return ("str", undef, $itab, $v);
+		}
 	}
 	return ("null",undef);
 }
@@ -257,7 +273,7 @@ sub DecodeSymbols {
 	my $format;
 	my @format = ();
 	my $maxitr = 0;
-	my @decarg = split(",",$allsym);
+	my @decarg = split(/(['"](?:\\['"]|[^'"])*['"])|,/,$allsym);
 	my @encode = ();
 	my $userel = 0;
 	my ($iis, $mrel) = split(',',$arc);
@@ -269,15 +285,15 @@ sub DecodeSymbols {
 		$userel = 1;
 	}
 	for my $arg (@decarg) {
+		if($arg eq "") { next; }
 		print STDERR "DECARG: '$arg' " if($verbose > 5);
 		my @lfs = ();
 		my $minus = "";
 		my @wsa = split(/((?:"(?:\\"|[^"])*")|(?:'\\.')|(?:'[^\\]')|(?:[^\\][ \t]))|([^ \t]*)|(?:[ \t]*)/,$arg);
 		for my $elem (@wsa) {
-			print STDERR "[ELEM'$elem']" if($elem ne "" && $verbose > 5);
-			if($elem eq "") {
-				# ignore empty
-			} elsif($elem eq "[") {
+			if($elem eq "") { next; }
+			print STDERR "[ELEM'$elem']" if($verbose > 5);
+			if($elem eq "[") {
 				if($arg !~ /\[.*\]/) {
 					print STDERR "$langtable{error}: $langtable{line} $.: $langtable{unmatchlb}\n";
 				} else {
@@ -305,6 +321,8 @@ sub DecodeSymbols {
 					$maxitr = $i;
 				} elsif($type eq "val") {
 					push @encode, "+ALM$ewordsz+$v";
+				} elsif($type eq "str") {
+					push @encode, "+ASLM$ewordsz$v";
 				} else {
 					push @lfs, "*";
 					push @encode, "+$v";
@@ -395,6 +413,15 @@ sub RunEncoder {
 							$otapp = 1;
 							$otlv = 1; # added for .DAT
 						}
+					} elsif($k =~ /^ASLM([0-9]*)/) {
+						if($1 ne '') {
+							$otapp = 2;
+							$otlv = 1;
+							$otlen = $1;
+						} else {
+							$otapp = 2;
+							$otlv = 1; # added for .DAT
+						}
 					} elsif($k =~ /^0x([0-9a-fA-F]+)$/) {
 						my $tl = length($1) * 4;
 						my $v = oct("0x$1");
@@ -406,7 +433,7 @@ sub RunEncoder {
 						$output .= $ins;
 						} else {
 						push @output, $ins;
-						$otapp = 0;
+						$otapp = 0 if($otapp == 1);
 						}
 					} elsif($k =~ /^%([01]+)$/ ) {
 						my $x = $1;
@@ -416,7 +443,7 @@ sub RunEncoder {
 							$output .= $x;
 						} else {
 						push @output, $x;
-						$otapp = 0;
+						$otapp = 0 if($otapp == 1);
 						print STDERR "ENC-ACL\n" if($verbose > 5);
 						}
 					} elsif($k =~ /\\([0-9]+)/ ) {
@@ -427,7 +454,7 @@ sub RunEncoder {
 						$output .= $ins;
 						} else {
 						push @output, $ins;
-						$otapp = 0;
+						$otapp = 0 if($otapp == 1);
 						print STDERR "ENC-ACL\n" if($verbose > 5);
 						}
 						print STDERR "ENC-Res: $ins " . join('',@apd) . "\n" if($verbose > 5);
@@ -442,7 +469,7 @@ sub RunEncoder {
 						$output .= $o;
 						} else {
 						push @output, $o;
-						$otapp = 0;
+						$otapp = 0 if($otapp == 1);
 						print STDERR "ENC-ACL\n" if($verbose > 5);
 						}
 					} elsif($k eq '*') {
@@ -452,7 +479,7 @@ sub RunEncoder {
 						$output .= $x;
 						} else {
 						push @output, $x;
-						$otapp = 0;
+						$otapp = 0 if($otapp == 1);
 						print STDERR "ENC-ACL\n" if($verbose > 5);
 						}
 					} else {
@@ -461,6 +488,7 @@ sub RunEncoder {
 				}
 			}
 		}
+		$otapp = 0;
 		unshift @output,$output if($output ne '');
 	}
 	return @output;
