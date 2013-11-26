@@ -14,6 +14,7 @@ my %langtable = ( fileof1 => "Failed to open file: ", fileof2 => "",
 );
 my @regtable = ( {reg => '*', nam => 'intern'} );
 my @littable = ( );
+my @incltable = ( );
 my %symtable;
 my @allfile;
 my $vpc = 0;
@@ -496,7 +497,8 @@ sub RunEncoder {
 
 sub Pass2 {
 	for my $l (@allfile) {
-		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
+		my ($label,$opname,$linearg,$fnum) = ($l->{label},$l->{op},$l->{arg},$l->{fnum});
+		my $fname = @incltable[$fnum - 1]->{f};
 		$opname = uc $opname;
 		$vinstrend = $l->{ilen};
 		print STDERR join("\t",($l->{lnum},sprintf("%08x",$vpc),$label,$opname,$linearg)) . "\t"  if($verbose > 1);
@@ -557,13 +559,13 @@ sub Pass2 {
 			print STDERR "\n" if($verbose > 1 && $label ne '');
 		}
 		if($found == 0) {
-			print STDERR "$langtable{error}: $langtable{line} $l->{lnum}:",
+			print STDERR "$langtable{error}: $fname:$l->{lnum}:",
 			" $opname - $langtable{opunkn}\n$l->{ltxt}\n";
 			$errors++;
 		} else {
 			print STDERR "INT: $found$addrmode $format\n" if($verbose > 4);
 			if($addrmode == 0) {
-				print STDERR "$langtable{error}: $langtable{line} $l->{lnum}:",
+				print STDERR "$langtable{error}: $fname:$l->{lnum}:",
 					" $opname - $langtable{addrunkn}\n$l->{ltxt}\n";
 				$errors++;
 			} elsif($enc eq 'M') {
@@ -671,36 +673,42 @@ sub GetLineNum {
 	return undef;
 }
 
-sub Assemble {
-	my ($file, $outfile, $outbinfile) = @_;
-	my $assmpass = 0;
-	unless( open(ISF, "<", $file) ) {
+sub LoadInclude {
+	my ($file, $from, $scan, $rc) = @_;
+	my $fnum = 0;
+	my $lfh;
+	my $path = "";
+	if($file =~ /(.*\/)[^\/]*/) {
+		$path = $1;
+	}
+	if($rc > 20) {
+		print STDERR "ERROR: $file: included from $from, recurse limit\n";
+		$errors++;
+		return;
+	}
+	print STDERR "Loading file $file\n" if($verbose > 0);
+	unless( open($lfh, "<", $file) ) { # try open file
 		print STDERR $langtable{fileof1} . $file . $langtable{fileof2} . "\n";
 		return;
 	}
-	unless( open(OSF, ">", $outfile) ) {
-		print STDERR $langtable{fileof1} . $outfile . $langtable{fileof2} . "\n";
-		close ISF;
-		return;
-	}
-	unless( open(OBF, ">", $outbinfile) ) {
-		print STDERR $langtable{fileof1} . $outbinfile . $langtable{fileof2} . "\n";
-		close ISF;
-		close OSF;
-		return;
-	} else {
-		binmode OBF;
-	}
-	$errors = 0;
-	print STDERR "Pass 1\n" if($verbose > 0);
-	while(<ISF>) {
+	push @incltable, {f=>$file, i=>$from};
+	$fnum = @incltable; # get length
+	while(<$lfh>) {
 		# clean up the lines first
 		s/\n//;
 		my $prl = $_;
 		$prl =~ s/;.*$//;
 		#$prl =~ s/^\W*$//;
 		if($prl =~ /^[ \t]*$/) { # blank line
-			next
+			next;
+		}
+		if($prl =~ /[#.][iI]nclude[ \t]+("|<)([^"<>]*)("|>)/ ) { #includes
+			if($1 eq '"' && $3 eq '"') {
+				LoadInclude($path . $2,$file,1,$rc+1);
+			} elsif($1 eq '<' && $3 eq '>') {
+				LoadInclude($path . $2,$file,2,$rc+1);
+			}
+			next;
 		}
 		my ($label,$opname,@linearg) = split(/[ \t]+/, $prl);
 		my $linearg = join(' ',@linearg);
@@ -715,7 +723,7 @@ sub Assemble {
 				if($slnum == undef) {
 					print STDERR "$langtable{error}: Internal Error!\n";
 				} else {
-					print STDERR "$langtable{error}: $langtable{line} $.; $slnum->{lnum}: $langtable{duplabel}\n$_\n$slnum->{ltxt}\n";
+					print STDERR "$langtable{error}: $file:$.; $slnum->{lnum}: $langtable{duplabel}\n$_\n$slnum->{ltxt}\n";
 					$errors++;
 				}
 			}
@@ -731,13 +739,23 @@ sub Assemble {
 				}
 			}
 			if($found == 0) {
-				print STDERR "$langtable{error}: $langtable{line} $.: $opname - $langtable{opunkn}\n$_\n";
+				print STDERR "$langtable{error}: $file:$.: $opname - $langtable{opunkn}\n$_\n";
 				$errors++;
 			}
 		}
-		push @allfile, {lnum => $., ltxt => $_, label => $label, op => $opname, arg => $linearg};
+		push @allfile, {lnum => $., fnum => $fnum, ltxt => $_, label => $label, op => $opname, arg => $linearg};
 		print STDERR join("\t",($.,$label,$opname,$linearg,$enc))."\n" if($verbose > 1);
 	}
+	close ISF;
+}
+
+sub Assemble {
+	my ($file, $outfile, $outbinfile) = @_;
+	my $assmpass = 0;
+	@incltable = ( );
+	$errors = 0;
+	print STDERR "Pass 1\n" if($verbose > 0);
+	LoadInclude($file, "", 0, 0);
 	$assmpass = 2;
 	do {
 	$vpc = 0;
@@ -745,8 +763,19 @@ sub Assemble {
 	$flagpass = 0;
 	print STDERR "Pass $assmpass\n" if($verbose > 0);
 	Pass2();
-	} while(($assmpass++) < 9 && $flagpass >= 1);
+	} while(($assmpass++) < 9 && $flagpass >= 1 && $errors < 1);
 	if($errors == 0) {
+		unless( open(OSF, ">", $outfile) ) {
+			print STDERR $langtable{fileof1} . $outfile . $langtable{fileof2} . "\n";
+			return;
+		}
+		unless( open(OBF, ">", $outbinfile) ) {
+			print STDERR $langtable{fileof1} . $outbinfile . $langtable{fileof2} . "\n";
+			close OSF;
+			return;
+		} else {
+			binmode OBF;
+		}
 		print STDERR "Complete!\n" if($verbose > 0);
 		foreach my $l (@allfile) {
 		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
@@ -757,10 +786,9 @@ sub Assemble {
 		foreach my $l (keys %symtable) {
 			printf OSF "%08x  %s\n",$symtable{$l}{val},$l
 		}
+		close OSF;
+		close OBF;
 	} else {
 		print STDERR "Errors in assembly.\n";
 	}
-	close ISF;
-	close OSF;
-	close OBF;
 }
