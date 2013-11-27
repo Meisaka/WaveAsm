@@ -286,7 +286,7 @@ sub DecodeSymbols {
 		$userel = 1;
 	}
 	for my $arg (@decarg) {
-		if($arg eq "") { next; }
+		if($arg =~ /^[ \t]*$/) { next; }
 		print STDERR "DECARG: '$arg' " if($verbose > 5);
 		my @lfs = ();
 		my $minus = "";

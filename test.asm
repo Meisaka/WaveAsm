@@ -33,6 +33,9 @@ begin:
         MOV %sp, 0x30000    ; Sets Stack Pointer to the end of the 128KiB RAM     
         MOV %ia, isr                 
         MOV %flags, 0x100    ; Enable interrupts           
+	MOV %r1, 'E'        ; Test ASCII literals
+	MOV %r1, ' '        ; Test ASCII literals
+	MOV %r1, ','        ; Test ASCII literals
         MOV %r1, 0xBEBECAFE   
         ; Tested seting registers and using bit literal
 
