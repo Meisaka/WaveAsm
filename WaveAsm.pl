@@ -269,6 +269,56 @@ sub DecodeSymbol {
 	return ("null",undef);
 }
 
+sub SplitElem {
+	my ($allsym) = @_;
+	my @chars = split("",$allsym);
+	my @results = ();
+	my $item;
+	my $last = "";
+	my $state = 0;
+	foreach my $i (@chars) {
+		if($state == 0) {
+			if($i eq '"') {
+				$state = 1;
+			} elsif($i eq "'") {
+				$state = 2;
+			}
+			if($i =~ /[ \t]/) { # actual splitting pattern
+				push @results, $item if($item ne '');
+				$item = "";
+			} else {
+				$item .= $i;
+			}
+		} elsif($state == 1) {
+			if($last eq '\\') {
+				$item .= $i;
+				$last = "";
+			} else {
+				if($i eq '"') {
+					$state = 0;
+				}
+				$item .= $i;
+				$last = $i;
+			}
+		} elsif($state == 2) {
+			if($last eq '\\') {
+				$item .= $i;
+				$last = "";
+			} else {
+				if($i eq "'") {
+					$state = 0;
+				}
+				$item .= $i;
+				$last = $i;
+			}
+		} else {
+			$state = 0;
+		}
+	}
+	push @results, $item if($item ne '');
+	return @results;
+}
+
 sub DecodeSymbols {
 	my ($allsym, $itr, $arc, $wordsz) = @_;
 	my $format;
@@ -290,9 +340,10 @@ sub DecodeSymbols {
 		print STDERR "DECARG: '$arg' " if($verbose > 5);
 		my @lfs = ();
 		my $minus = "";
-		my @wsa = split(/((?:"(?:\\"|[^"])*")|(?:'\\.')|(?:'[^\\]')|(?:[^\\][ \t]))|([^ \t]*)|(?:[ \t]*)/,$arg);
+		#my @wsa = split(/((?:"(?:\\"|[^"])*")|(?:'\\.')|(?:'[^\\]')|(?:[^\\][ \t]))|([^ \t]*)|(?:[ \t]*)/,$arg);
+		my @wsa = SplitElem($arg);
 		for my $elem (@wsa) {
-			if($elem eq "") { next; }
+			if($elem =~ /^[ \t]*$/) { next; } # ignore empty elements
 			print STDERR "[ELEM'$elem']" if($verbose > 5);
 			if($elem eq "[") {
 				if($arg !~ /\[.*\]/) {
@@ -710,9 +761,16 @@ sub LoadInclude {
 			}
 			next;
 		}
-		my ($label,$opname,@linearg) = split(/[ \t]+/, $prl);
-		my $linearg = join(' ',@linearg);
-		$linearg =~ s/\+/ + /g;
+		my ($label,$opname,@linearg);# = split(/[ \t]+/, $prl);
+		my $linearg;# = join(' ',@linearg);
+		if($prl =~ /^([^ \t]*)[ \t]+([^ \t]*)[ \t]+([^ \t]*.*)$/) { # standard line
+			($label,$opname,$linearg) = ($1,$2,$3);
+		} elsif($prl =~ /^[ \t]*([^ \t]+):[ \t]+([^ \t]*)[ \t]+([^ \t]*.*)$/) { # alt label pos
+			($label,$opname,$linearg) = ($1,$2,$3);
+		} elsif($prl =~ /^[ \t]*([^ \t]+):[ \t]*$/) { # label only
+			($label,$opname,$linearg) = ($1,'','');
+		}
+		#$linearg =~ s/\+/ + /g;
 		if($label ne '') {
 			$label =~ s/:$//;
 			my $slnum;
