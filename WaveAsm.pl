@@ -763,9 +763,9 @@ sub LoadInclude {
 		}
 		my ($label,$opname,@linearg);# = split(/[ \t]+/, $prl);
 		my $linearg;# = join(' ',@linearg);
-		if($prl =~ /^([^ \t]*)[ \t]+([^ \t]*)[ \t]+([^ \t]*.*)$/) { # standard line
+		if($prl =~ /^([^ \t]*)[ \t]+([^ \t]*)[ \t]*([^ \t]*.*)$/) { # standard line
 			($label,$opname,$linearg) = ($1,$2,$3);
-		} elsif($prl =~ /^[ \t]*([^ \t]+):[ \t]+([^ \t]*)[ \t]+([^ \t]*.*)$/) { # alt label pos
+		} elsif($prl =~ /^[ \t]*([^ \t]+):[ \t]+([^ \t]*)[ \t]*([^ \t]*.*)$/) { # alt label pos
 			($label,$opname,$linearg) = ($1,$2,$3);
 		} elsif($prl =~ /^[ \t]*([^ \t]+):[ \t]*$/) { # label only
 			($label,$opname,$linearg) = ($1,'','');
