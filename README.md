@@ -57,7 +57,7 @@ All labels must appear first on a line, before any white space.
 All instructions must come after label and whitespace, whitespace before the instruction is required.
 Arguments optionally follow the instruction, and are seperated with commas "," or depending on the instruction set, the plus sign "+".
 The exact format of arguments is instruction set specific.
-The default instruction set is [RC3200](https://github.com/Zardoz89/Trillek-Computer/blob/RC3200/RC3200.md).
+The default instruction set is [TR3200](https://github.com/Zardoz89/Trillek-Computer/blob/RC3200/TR3200.md).
 
 Known bugs
 ----

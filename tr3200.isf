@@ -1,7 +1,7 @@
 # Comment
 <HEAD>
-ISN:"RC3200"
-ISD:"RC3200 CPU Instruction set from doc 0.7"
+ISN:"TR3200"
+ISD:"TR3200 CPU Instruction set from doc 0.7"
 # endian-ness LE (little endian), BE (big endian), NE (endianless i.e. PY
 CPUE:LE
 # memory word size
