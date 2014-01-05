@@ -10,10 +10,11 @@ public:
 	BitString();
 	virtual ~BitString();
 
+	void clear();
 	void AddRight(bitstore_t v, int c);
 	void AddLeft(bitstore_t v, int c);
-	std::string GetByteStringLE();
-	std::string GetByteStringBE();
+	std::string GetHexLE();
+	std::string GetHexBE();
 #define BITSTRA(x) \
 	BitString& operator<<(x l) { AddRight((bitstore_t)l, 8*sizeof(x)); return *this; } \
 	BitString& operator>>(x l) { AddLeft((bitstore_t)l, 8*sizeof(x)); return *this; }
@@ -28,7 +29,9 @@ public:
 #undef BITSTRA
 private:
 	std::deque<bitstore_t> bits;
-	bitstore_t cbits;
-	int cbcount;
+	bitstore_t rbits;
+	bitstore_t lbits;
+	int rbcount;
+	int lbcount;
 };
 
