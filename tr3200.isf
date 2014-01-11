@@ -1,7 +1,7 @@
 # Comment
 <HEAD>
 ISN:"TR3200"
-ISD:"TR3200 CPU Instruction set from doc 0.7"
+ISD:"TR3200 CPU Instruction set from doc 0.9"
 # endian-ness LE (little endian), BE (big endian), NE (endianless i.e. PY
 CPUE:LE
 # memory word size
@@ -33,27 +33,11 @@ ALIGN:4
 %r8,%R8:%01000
 %r9,%R9:%01001
 %r10,%R10:%01010
-%r11,%R11:%01011
-%r12,%R12:%01100
-%r13,%R13:%01101
-%r14,%R14:%01110
-%r15,%R15:%01111
-%r16,%R16:%10000
-%r17,%R17:%10001
-%r18,%R18:%10010
-%r19,%R19:%10011
-%r20,%R20:%10100
-%r21,%R21:%10101
-%r22,%R22:%10110
-%r23,%R23:%10111
-%r24,%R24:%11000
-%r25,%R25:%11001
-%r26,%R26:%11010
-%r27,%R27,%y,%Y:%11011
-%r28,%R28,%ia,%IA:%11100
-%r29,%R29,%flags,%FLAGS:%11101
-%r30,%R30,%bp,%BP:%11110
-%r31,%R31,%sp,%SP:%11111
+%r11,%R11,%y,%Y:%01011
+%r12,%R12,%bp,%BP:%01100
+%r13,%R13,%sp,%SP:%01101
+%r14,%R14,%ia,%IA:%01110
+%r15,%R15,%flags,%FLAGS:%01111
 # attrib set Special 32 bit, encode Length 5 bits
 # Special reserves the names, they may or may not have encodings
 +S32,L5
