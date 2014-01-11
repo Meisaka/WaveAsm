@@ -55,6 +55,7 @@ WV_PNE : new WaveA_Token(19,"PUCT PNE"),
 WV_COMMA : new WaveA_Token(20,"PUCT COMMA"),
 WV_WS : new WaveA_Token(21,""),
 WV_IMM : new WaveA_Token(22,"IMM"),
+WV_CMNT : new WaveA_Token(23,"CM"),
 makeToken : function(t,v) {
 	var f = Object.create(t);
 	if(v !== undefined) {
@@ -173,6 +174,40 @@ CheckOp : function(o) {
 		}
 		return false;
 	},
+CheckReg : function(o) {
+		var i;
+		var op = o.toUpperCase();
+		for(i in this.regtable) {
+			if(op == this.regtable[i].reg) {
+				return this.regtable[i];
+			}
+		}
+		return false;
+	},
+CheckMacro : function(o) {
+		var i;
+		var mc = o.toUpperCase();
+		for(i in this.macrotable) {
+			if(mc == this.macrotable[i]) {
+				return true;
+			}
+		}
+		return false;
+	},
+ScanLit : function(v) {
+		var i;
+		var lt;
+		var lr = [];
+		for(i in this.littable) {
+			lt = this.littable[i];
+			if(lt.rl == "*") {
+				lr.push(lt);
+			} else if(v != "*" && v >= lt.rl && v <= lt.rh) {
+				lr.push(lt);
+			}
+		}
+		return lr;
+	},
 LineScan : function(lt) {
 				// FSM line scanner + simple parser
 		var i, cc, lc;
@@ -224,6 +259,10 @@ LineScan : function(lt) {
 						xs = 3;
 						cpl.st = i + 1;
 						lc = 1;
+						break;
+					case ';':
+						cpl.st = i;
+						xs = 9;
 						break;
 					case ',':
 						pr.push(tkn = this.makeToken(this.WV_COMMA));
@@ -282,7 +321,7 @@ LineScan : function(lt) {
 					cpl
 					cpl.tx = lt.substring(cpl.st, cpl.en+1);
 					pr.push(tkn = this.makeToken(this.WV_STRING, cpl.tx));
-					test += tkn.createSpan();
+					test += '"'+tkn.createSpan()+'"';
 				} else if(cc == "\\") {
 					lc = 1;
 				} else {
@@ -295,7 +334,7 @@ LineScan : function(lt) {
 					xs = 0;
 					cpl.tx = lt.substring(cpl.st, cpl.en+1);
 					pr.push(tkn = this.makeToken(this.WV_NUMCHR, cpl.tx));
-					test += tkn.createSpan();
+					test += "'"+tkn.createSpan()+"'";
 				} else if(cc == '\\') {
 					lc = 1;
 				} else {
@@ -321,17 +360,21 @@ LineScan : function(lt) {
 					} else {
 						cpl.tx = lt.substring(cpl.st, cpl.en+1);
 						if((oponl == 0) && this.CheckOp(cpl.tx)) {
-							cpl.tx = lt.substring(cpl.st, cpl.en+1);
 							pr.push(tkn = this.makeToken(this.WV_OPC, cpl.tx));
+							test += tkn.createSpan();
+							oponl = 1;
+						} else if((oponl == 0) && this.CheckMacro(cpl.tx)) {
+							pr.push(tkn = this.makeToken(this.WV_MACRO, cpl.tx));
 							test += tkn.createSpan();
 							oponl = 1;
 						} else {
 							if(cpl.st == 0) {
-								cpl.tx = lt.substring(cpl.st, cpl.en+1);
 								pr.push(tkn = this.makeToken(this.WV_LABEL, cpl.tx));
 								test += tkn.createSpan();
+							} else if(this.CheckReg(cpl.tx)) {
+								pr.push(tkn = this.makeToken(this.WV_REG, cpl.tx));
+								test += tkn.createSpan();
 							} else {
-								cpl.tx = lt.substring(cpl.st, cpl.en+1);
 								pr.push(tkn = this.makeToken(this.WV_IDENT, cpl.tx));
 								test += tkn.createSpan();
 							}
@@ -353,7 +396,10 @@ LineScan : function(lt) {
 					} else {
 						xs = 0;
 						cpl.en = i-1;
-						test += "NUM " + lt.substring(cpl.st, cpl.en+1);
+						cpl.tx = lt.substring(cpl.st, cpl.en+1);
+						// Zero
+						pr.push(tkn = this.makeToken(this.WV_NUMDEC, cpl.tx));
+						test += tkn.createSpan();
 						// Rescan needed
 						continue;
 					}
@@ -366,7 +412,9 @@ LineScan : function(lt) {
 					} else {
 						xs = 0;
 						cpl.en = i-1;
-						test += "NUM " + lt.substring(cpl.st, cpl.en+1);
+						cpl.tx = lt.substring(cpl.st, cpl.en+1);
+						pr.push(tkn = this.makeToken(this.WV_NUMDEC, cpl.tx));
+						test += tkn.createSpan();
 						// Rescan needed
 						continue;
 					}
@@ -375,6 +423,12 @@ LineScan : function(lt) {
 			case 5:
 				if(cc.search(/[0-9]/) > -1) {
 					cpl.en = i;
+				} else if(cc == 'h') {
+					cpl.en = i;
+					cpl.tx = lt.substring(cpl.st, cpl.en+1);
+					pr.push(tkn = this.makeToken(this.WV_NUMHEX, cpl.tx));
+					test += tkn.createSpan();
+					xs = 0;
 				} else {
 					xs = 0;
 					cpl.en = i-1;
@@ -388,9 +442,6 @@ LineScan : function(lt) {
 			case 6:
 				if(cc.search(/[0-9a-fA-F]/) > -1) {
 					cpl.en = i;
-				} else if(cc == 'h') {
-					test += "HEX " + lt.substring(cpl.st, cpl.en+1);
-					xs = 0;
 				} else {
 					xs = 0;
 					cpl.en = i-1;
@@ -420,9 +471,19 @@ LineScan : function(lt) {
 				} else {
 					xs = 0;
 					cpl.en = i-1;
-					test += "OCT " + lt.substring(cpl.st, cpl.en+1);
+					cpl.tx = lt.substring(cpl.st, cpl.en+1);
+					pr.push(tkn = this.makeToken(this.WV_NUMOCT, cpl.tx));
+					test += tkn.createSpan();
 					// Rescan needed
 					continue;
+				}
+				break;
+			case 9:
+				cpl.en = i;
+				if(cc == "") {
+					cpl.tx = lt.substring(cpl.st, cpl.en+1);
+					pr.push(tkn = this.makeToken(this.WV_CMNT, cpl.tx));
+					test += tkn.createSpan();
 				}
 				break;
 			}
@@ -435,14 +496,107 @@ LineScan : function(lt) {
 				break;
 			}
 		}
-		return test;
+		return {html: test, tokens: pr};
 	},
 Assemble : function(sc) {
 		var lines = sc.split(/\n/);
 		var i;
+		var x;
+		var ctk;
+		var rtm;
+		var nval;
+		var exps = [];
+		var fmt = "";
 		var cp = "";
+		var ltk;
+		function fnames(a) {
+			var q, w = [];
+			for(q in a) {
+				w.push(a[q].name);
+			}
+			return "{" + w.join(";") + "}";
+		}
 		for(i in lines) {
-			cp += "<div>" + this.LineScan(lines[i]) + "</div>";
+			fmt = ""
+			ltk = this.LineScan(lines[i]);
+			cp += "<div>" + ltk.html;
+			for(x in ltk.tokens) {
+				ctk = ltk.tokens[x];
+				switch(ctk.token) {
+				case this.WV_NUMHEX.token:
+				case this.WV_NUMDEC.token:
+				case this.WV_NUMBIN.token:
+				case this.WV_NUMOCT.token:
+				case this.WV_NUMCHR.token:
+					switch(ctk.token) {
+					case this.WV_NUMHEX.token:
+						ctk.value = parseInt(ctk.value,16); break;
+					case this.WV_NUMDEC.token:
+						ctk.value= parseInt(ctk.value,10); break;
+					case this.WV_NUMBIN.token:
+						ctk.value= parseInt(ctk.value,2); break;
+					case this.WV_NUMOCT.token:
+						ctk.value= parseInt(ctk.value,8); break;
+					case this.WV_NUMCHR.token:
+						nval = ctk.value.charCodeAt(0);
+						if(nval == 92) {
+							nval = ctk.value.charCodeAt(1);
+							switch(nval) {
+								case 116:
+									nval = 9;
+									break;
+								case 114:
+									nval = 13;
+									break;
+								case 110:
+									nval = 10;
+									break;
+								case 32:
+									nval = 0;
+									break;
+							}
+						}
+						ctk.value= nval;
+						break;
+					}
+					if(exps.length == 0) {
+						//fmt += ctk.value.toString(10);
+						fmt += fnames(this.ScanLit(ctk.value));
+					} else if(exps.length == 1 && exps[0].token == this.WV_MINUS.token){
+						ctk.value= -ctk.value;
+						exps.pop();
+						//fmt += ctk.value.toString(10);
+						fmt += fnames(this.ScanLit(ctk.value));
+					} else {
+						exps.push(ctk);
+					}
+					break;
+				case this.WV_REG.token:
+					rtm = this.CheckReg(ctk.value);
+					fmt += rtm.name;
+					break;
+				case this.WV_MINUS.token:
+				case this.WV_PLUS.token:
+					exps.push(ctk);
+					break;
+				case this.WV_COMMA.token:
+					fmt += ",";
+					break;
+				case this.WV_INS.token:
+					fmt += "[";
+					break;
+				case this.WV_INE.token:
+					fmt += "]";
+					break;
+				case this.WV_PNS.token:
+					fmt += "(";
+					break;
+				case this.WV_PNE.token:
+					fmt += ")";
+					break;
+				}
+			}
+			cp += fmt + "</div>";
 		}
 		return cp;
 	}
