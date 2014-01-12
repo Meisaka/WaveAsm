@@ -1,7 +1,7 @@
 function WaveA_Op(opc, mod, fmt, e) {
 	this.op = opc;
 	this.param = mod;
-	this.format = fmt;
+	this.fmt = fmt;
 	this.enc = e;
 }
 function WaveA_Reg(r, n, e) {
@@ -506,23 +506,67 @@ Assemble : function(sc) {
 		var rtm;
 		var nval;
 		var exps = [];
+		var symtable = [];
+		var linetable = [];
+		var vpc = 0;
+		var vps = 0;
+		var ltr = 0;
+		var otr = 0;
+		var mtr = 0;
+		var ocp = 0;
+		var cop;
 		var fmt = "";
 		var cp = "";
 		var ltk;
-		function fnames(a) {
-			var q, w = [];
-			for(q in a) {
-				w.push(a[q].name);
+		function lname(a,c) {
+			if(c >= a.length) { c = a.length - 1; }
+			return a[c];
+		}
+		function scanIdent1(a) {
+			var q ,w;
+			for(q in symtable) {
+				w = symtable[q];
+				if(w.n == a) {
+					return w;
+				}
 			}
-			return "{" + w.join(";") + "}";
+			return false;
+		}
+		function OpNext(opt) {
+			var q;
+			q = otr;
+			while(q < opt.length) {
+				if(opt[q].op == cop) {
+					return otr = q;
+				} else {
+					q++;
+				}
+			}
 		}
 		for(i in lines) {
-			fmt = ""
 			ltk = this.LineScan(lines[i]);
+			vps = 0;
 			cp += "<div>" + ltk.html;
+			ltr = 0;
+			otr = -1;
+			mtr = 0;
+			while(ltr <= mtr) {
+			fmt = ""
 			for(x in ltk.tokens) {
 				ctk = ltk.tokens[x];
 				switch(ctk.token) {
+				case this.WV_OPC.token:
+					cop = ctk.value.toUpperCase();
+					if(otr < 0) { otr = 0; }
+					OpNext(this.optable);
+					break;
+				case this.WV_IDENT.token:
+					rtm = scanIdent1(ctk.value);
+					if(rtm) {
+						nval = rtm.v;
+					} else {
+						nval = "*";
+					}
 				case this.WV_NUMHEX.token:
 				case this.WV_NUMDEC.token:
 				case this.WV_NUMBIN.token:
@@ -530,13 +574,13 @@ Assemble : function(sc) {
 				case this.WV_NUMCHR.token:
 					switch(ctk.token) {
 					case this.WV_NUMHEX.token:
-						ctk.value = parseInt(ctk.value,16); break;
+						nval = parseInt(ctk.value,16); break;
 					case this.WV_NUMDEC.token:
-						ctk.value= parseInt(ctk.value,10); break;
+						nval = parseInt(ctk.value,10); break;
 					case this.WV_NUMBIN.token:
-						ctk.value= parseInt(ctk.value,2); break;
+						nval = parseInt(ctk.value,2); break;
 					case this.WV_NUMOCT.token:
-						ctk.value= parseInt(ctk.value,8); break;
+						nval = parseInt(ctk.value,8); break;
 					case this.WV_NUMCHR.token:
 						nval = ctk.value.charCodeAt(0);
 						if(nval == 92) {
@@ -556,19 +600,23 @@ Assemble : function(sc) {
 									break;
 							}
 						}
-						ctk.value= nval;
 						break;
 					}
+					rtm = false;
 					if(exps.length == 0) {
 						//fmt += ctk.value.toString(10);
-						fmt += fnames(this.ScanLit(ctk.value));
+						rtm = this.ScanLit(nval);
 					} else if(exps.length == 1 && exps[0].token == this.WV_MINUS.token){
-						ctk.value= -ctk.value;
+						nval = -nval;
 						exps.pop();
 						//fmt += ctk.value.toString(10);
-						fmt += fnames(this.ScanLit(ctk.value));
+						rtm = this.ScanLit(nval);
 					} else {
 						exps.push(ctk);
+					}
+					if(rtm) {
+						fmt += lname(rtm, ltr).name;
+						if(mtr < rtm.length) { mtr = rtm.length; }
 					}
 					break;
 				case this.WV_REG.token:
@@ -596,7 +644,32 @@ Assemble : function(sc) {
 					break;
 				}
 			}
-			cp += fmt + "</div>";
+			if(otr > -1) {
+			if(fmt == this.optable[otr].fmt) {
+				cp += "-" + ltr + "-OK-";
+				break;
+			} else {
+				if(ltr == mtr) {
+					otr++;
+					OpNext(this.optable);
+					if(otr < this.optable.length) {
+						ltr = 0;
+						continue;
+					} else {
+						cp += "--OP ERROR--";
+						break;
+					}
+				}
+			}
+			}
+			ltr++;
+			}
+			linetable.push({n:i+1, t:ltk.tokens, a:vpc, l:vps});
+			vpc += vps;
+			if((otr > -1) && (otr < this.optable.length)) {
+				cp += " " + otr + ":" + this.optable[otr].op + " " + this.optable[otr].fmt + "=" + fmt;
+			}
+			cp += "</div>";
 		}
 		return cp;
 	}
