@@ -517,6 +517,9 @@ Assemble : function(sc) {
 		var cop;
 		var fmt = "";
 		var cp = "";
+		var cq = "";
+		var pass = 0;
+		var fagn = false;
 		var ltk;
 		function lname(a,c) {
 			if(c >= a.length) { c = a.length - 1; }
@@ -546,7 +549,8 @@ Assemble : function(sc) {
 		for(i in lines) {
 			ltk = this.LineScan(lines[i]);
 			vps = 0;
-			cp += "<div>" + ltk.html;
+			cp += "<div>" + ltk.html + "</div>";
+			cq = "|";
 			ltr = 0;
 			otr = -1;
 			mtr = 0;
@@ -559,6 +563,16 @@ Assemble : function(sc) {
 					cop = ctk.value.toUpperCase();
 					if(otr < 0) { otr = 0; }
 					OpNext(this.optable);
+					break;
+				case this.WV_LABEL.token:
+					rtm = scanIdent1(ctk.value);
+					if(rtm) {
+						cq += "--ERROR LABEL DUP ("+i+1 +","+ rtm.l+")--";
+						nval = rtm.v;
+					} else {
+						symtable.push({n:ctk.value,v:"*",l:i+1});
+						nval = "*";
+					}
 					break;
 				case this.WV_IDENT.token:
 					rtm = scanIdent1(ctk.value);
@@ -646,7 +660,7 @@ Assemble : function(sc) {
 			}
 			if(otr > -1) {
 			if(fmt == this.optable[otr].fmt) {
-				cp += "-" + ltr + "-OK-";
+				cq += "-" + ltr + "-OK-";
 				break;
 			} else {
 				if(ltr == mtr) {
@@ -656,7 +670,7 @@ Assemble : function(sc) {
 						ltr = 0;
 						continue;
 					} else {
-						cp += "--OP ERROR--";
+						cq += "--OP ERROR--";
 						break;
 					}
 				}
@@ -664,13 +678,154 @@ Assemble : function(sc) {
 			}
 			ltr++;
 			}
-			linetable.push({n:i+1, t:ltk.tokens, a:vpc, l:vps});
+			linetable.push({n:i+1, t:ltk.tokens, a:vpc, l:vps, x:cq});
 			vpc += vps;
-			if((otr > -1) && (otr < this.optable.length)) {
-				cp += " " + otr + ":" + this.optable[otr].op + " " + this.optable[otr].fmt + "=" + fmt;
-			}
-			cp += "</div>";
 		}
-		return cp;
+		//
+		fagn = true;
+		for(pass = 1; (pass < 7) && fagn; pass++) {
+		fagn = false;
+		for(i in linetable) {
+			ltk = linetable[i].t;
+			vps = 0;
+			cq = "|";
+			ltr = 0;
+			otr = -1;
+			mtr = 0;
+ventest:	while(ltr <= mtr) {
+			fmt = ""
+			for(x in ltk) {
+				ctk = ltk[x];
+				switch(ctk.token) {
+				case this.WV_OPC.token:
+					cop = ctk.value.toUpperCase();
+					if(otr < 0) { otr = 0; }
+					OpNext(this.optable);
+					break;
+				case this.WV_IDENT.token:
+					rtm = scanIdent1(ctk.value);
+					if(rtm) {
+						nval = rtm.v;
+					} else {
+						cq += "--ERROR NO IDENT--";
+						mtr = 0;
+						break ventest;
+					}
+				case this.WV_NUMHEX.token:
+				case this.WV_NUMDEC.token:
+				case this.WV_NUMBIN.token:
+				case this.WV_NUMOCT.token:
+				case this.WV_NUMCHR.token:
+					switch(ctk.token) {
+					case this.WV_NUMHEX.token:
+						nval = parseInt(ctk.value,16); break;
+					case this.WV_NUMDEC.token:
+						nval = parseInt(ctk.value,10); break;
+					case this.WV_NUMBIN.token:
+						nval = parseInt(ctk.value,2); break;
+					case this.WV_NUMOCT.token:
+						nval = parseInt(ctk.value,8); break;
+					case this.WV_NUMCHR.token:
+						nval = ctk.value.charCodeAt(0);
+						if(nval == 92) {
+							nval = ctk.value.charCodeAt(1);
+							switch(nval) {
+								case 116:
+									nval = 9;
+									break;
+								case 114:
+									nval = 13;
+									break;
+								case 110:
+									nval = 10;
+									break;
+								case 32:
+									nval = 0;
+									break;
+							}
+						}
+						break;
+					}
+					rtm = false;
+					if(exps.length == 0) {
+						//fmt += ctk.value.toString(10);
+						rtm = this.ScanLit(nval);
+					} else if(exps.length == 1 && exps[0].token == this.WV_MINUS.token){
+						nval = -nval;
+						exps.pop();
+						//fmt += ctk.value.toString(10);
+						rtm = this.ScanLit(nval);
+					} else {
+						exps.push(ctk);
+					}
+					if(rtm) {
+						fmt += lname(rtm, ltr).name;
+						if(mtr < rtm.length) { mtr = rtm.length; }
+					}
+					break;
+				case this.WV_REG.token:
+					rtm = this.CheckReg(ctk.value);
+					fmt += rtm.name;
+					break;
+				case this.WV_MINUS.token:
+				case this.WV_PLUS.token:
+					exps.push(ctk);
+					break;
+				case this.WV_COMMA.token:
+					fmt += ",";
+					break;
+				case this.WV_INS.token:
+					fmt += "[";
+					break;
+				case this.WV_INE.token:
+					fmt += "]";
+					break;
+				case this.WV_PNS.token:
+					fmt += "(";
+					break;
+				case this.WV_PNE.token:
+					fmt += ")";
+					break;
+				}
+			}
+			if(otr > -1) {
+			if(fmt == this.optable[otr].fmt) {
+				cq += "-" + ltr + "-OK-";
+				break;
+			} else {
+				if(ltr == mtr) {
+					otr++;
+					OpNext(this.optable);
+					if(otr < this.optable.length) {
+						ltr = 0;
+						continue;
+					} else {
+						cq += "--OP ERROR--";
+						break;
+					}
+				}
+			}
+			}
+			ltr++;
+			}
+			linetable[i].a = vps;
+			vpc += vps;
+			if(linetable[i].l != vps) {
+				linetable[i].l = vps;
+				fagn = true;
+			}
+			if((otr > -1) && (otr < this.optable.length)) {
+				cq += " " + otr + ":" + this.optable[otr].op + " " + this.optable[otr].fmt + "=" + fmt;
+			}
+			//linetable.push({n:i+1, t:ltk.tokens, a:vpc, l:vps});
+			linetable[i].x += cq;
+		}
+		}
+		//
+		cq = "";
+		for(i in linetable) {
+			cq += "<div>" + linetable[i].x + "</div>";
+		}
+		return {html:cp, bhtml:cq };
 	}
 };
