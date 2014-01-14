@@ -56,6 +56,8 @@ WV_COMMA : new WaveA_Token(20,"PUCT COMMA"),
 WV_WS : new WaveA_Token(21,""),
 WV_IMM : new WaveA_Token(22,"IMM"),
 WV_CMNT : new WaveA_Token(23,"CM"),
+WV_SL : new WaveA_Token(24,"SLF"),
+WV_BSL : new WaveA_Token(25,"SLB"),
 makeToken : function(t,v) {
 	var f = Object.create(t);
 	if(v !== undefined) {
@@ -68,7 +70,7 @@ Loadisf : function(isf) {
 		var t, i;
 		var readmode = 0;
 		var y, z;
-		var x;
+		var x, ql = [];
 		var rgs;
 		var nam, lnv;
 		for( z in lines ) {
@@ -108,10 +110,21 @@ Loadisf : function(isf) {
 						x = y.split(/:/);
 						rgs = x[0].split(/,/);
 						if(x[0] == "*") {
-							t = new WaveA_Lit("*","*",nam, x.join(":"));
-						} else {
+							ql = [];
 							x.shift();
-							t = new WaveA_Lit(parseInt(rgs[0]), parseInt(rgs[1]), nam, x.join(":"));
+							while(x.length > 0) {
+								ql.push(this.LineScan(x[0], false).tokens);
+								x.shift();
+							}
+							t = new WaveA_Lit("*","*",nam, ql);
+						} else {
+							ql = [];
+							x.shift();
+							while(x.length > 0) {
+								ql.push(this.LineScan(x[0], false).tokens);
+								x.shift();
+							}
+							t = new WaveA_Lit(parseInt(rgs[0]), parseInt(rgs[1]), nam, ql);
 						}
 						this.littable.push(t);
 					}
@@ -208,12 +221,14 @@ ScanLit : function(v) {
 		}
 		return lr;
 	},
-LineScan : function(lt) {
+LineScan : function(lt, ids) {
 				// FSM line scanner + simple parser
 		var i, cc, lc;
 		var xs, cpl, oponl, tkn;
 		var pr = [];
 		var test = "";
+		var alp = true; // false = tokenize for encoder
+		if(ids != undefined) { alp = ids; }
 		cpl = {st:0, en:0, ty:0};
 		xs = 0;
 		i = 0;
@@ -226,7 +241,15 @@ LineScan : function(lt) {
 			}
 			switch(xs) {
 			default:
-				if(cc.search(/[_.%a-zA-Z]/) > -1) {
+				if(alp && (cc.search(/[_.%a-zA-Z]/) > -1)) {
+					cpl.st = i;
+					lc = 0;
+					xs = 3;
+				} else if(!alp && (cc == '%')) {
+					cpl.st = i+1;
+					lc = 0;
+					xs = 7;
+				} else if(!alp && (cc.search(/[a-zA-Z]/) > -1)) {
 					cpl.st = i;
 					lc = 0;
 					xs = 3;
@@ -283,6 +306,15 @@ LineScan : function(lt) {
 					case '#':
 						pr.push(tkn = this.makeToken(this.WV_IMM));
 						test += tkn.createSpan("IMM ");
+						break;
+					case '*':
+						pr.push(this.makeToken(this.WV_STAR));
+						break;
+					case '/':
+						pr.push(this.makeToken(this.WV_SL));
+						break;
+					case '\\':
+						pr.push(this.makeToken(this.WV_BSL));
 						break;
 					case '$':
 						test += "VEC ";
@@ -368,7 +400,7 @@ LineScan : function(lt) {
 							test += tkn.createSpan();
 							oponl = 1;
 						} else {
-							if(cpl.st == 0) {
+							if((cpl.st == 0)) {
 								pr.push(tkn = this.makeToken(this.WV_LABEL, cpl.tx));
 								test += tkn.createSpan();
 							} else if(this.CheckReg(cpl.tx)) {
@@ -486,6 +518,20 @@ LineScan : function(lt) {
 					test += tkn.createSpan();
 				}
 				break;
+			case 10:
+				if(cc.search(/[a-zA-Z]/) > -1) {
+					cpl.en = i;
+				} else {
+					xs = 0;
+					cpl.en = i - 1;
+					cpl.tx = lt.substring(cpl.st, cpl.en+1);
+					pr.push(tkn = this.makeToken(this.WV_IDENT, cpl.tx));
+					test += tkn.createSpan();
+					
+					// Rescan needed
+					continue;
+				}
+				break;
 			}
 
 			// must be last
@@ -521,6 +567,7 @@ Assemble : function(sc) {
 		var pass = 0;
 		var fagn = false;
 		var ltk;
+		var etk;
 		function lname(a,c) {
 			if(c >= a.length) { c = a.length - 1; }
 			return a[c];
