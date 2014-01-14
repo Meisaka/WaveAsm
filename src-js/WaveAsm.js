@@ -86,7 +86,8 @@ Loadisf : function(isf) {
 					}
 					// process opcodes
 					x = y.split(/:/);
-					t = new WaveA_Op(x[0].toUpperCase(), x[1], x[2].substring(1, x[2].length-1), x[3].replace(/[ \t][\t ]*/, " "));
+					ql = [this.LineScan(x[3].replace(/[ \t][\t ]*/, " "), false).tokens];
+					t = new WaveA_Op(x[0].toUpperCase(), x[1], x[2].substring(1, x[2].length-1), ql);
 					this.optable.push(t);
 					break;
 				case 2:
@@ -144,8 +145,9 @@ Loadisf : function(isf) {
 					} else {
 						x = y.split(/:/);
 						rgs = x[0].toUpperCase().split(/,/);
+						ql = [this.LineScan(x[1], false).tokens];
 						for( i in rgs ) {
-							t = new WaveA_Reg(rgs[i], nam, x[1]);
+							t = new WaveA_Reg(rgs[i], nam, ql);
 							this.regtable.push(t);
 						}
 					}
@@ -228,6 +230,9 @@ LineScan : function(lt, ids) {
 		var pr = [];
 		var test = "";
 		var alp = true; // false = tokenize for encoder
+		if(lt == undefined) {
+			return {html: test, tokens: pr};
+		}
 		if(ids != undefined) { alp = ids; }
 		cpl = {st:0, en:0, ty:0};
 		xs = 0;
@@ -252,7 +257,7 @@ LineScan : function(lt, ids) {
 				} else if(!alp && (cc.search(/[a-zA-Z]/) > -1)) {
 					cpl.st = i;
 					lc = 0;
-					xs = 3;
+					xs = 10;
 				} else if(cc.search(/[0-9]/) > -1) {
 					cpl.st = i;
 					lc = 0;
@@ -279,7 +284,7 @@ LineScan : function(lt, ids) {
 						}
 						break;
 					case ':':
-						xs = 3;
+						if(alp) { xs = 3; }
 						cpl.st = i + 1;
 						lc = 1;
 						break;
@@ -544,6 +549,49 @@ LineScan : function(lt, ids) {
 		}
 		return {html: test, tokens: pr};
 	},
+Encode : function(et, beta) {
+		var x, i, cek, cet, wtf;
+		var rec = false;
+		var bin = "";
+		var h = "", pf = "", sf = "";
+		var na = [];
+		for(x in et) {
+			cek = et[x];
+		for(i in cek) {
+			cet = cek[i];
+			switch(cet.token) {
+			case this.WV_PLUS.token:
+				break;
+			case this.WV_WS.token:
+				bin += " ";
+				break;
+			case this.WV_BSL.token:
+				rec = true;
+				break;
+			case this.WV_NUMBIN.token:
+				bin += cet.value;
+				break;
+			case this.WV_IDENT.token:
+				break;
+			case this.WV_NUMDEC.token:
+				if(rec) {
+					rec = false;
+					wtf = this.Encode(beta[parseInt(cet.value,10)-1],[]);
+					bin += wtf.bin;
+					sf += wtf.suf;
+					pf += wtf.pfx;
+				}
+				break;
+			case this.WV_NUMHEX.token:
+				bin += cet.value;
+				break;
+			case this.WV_NUMOCT.token:
+				break;
+			}
+		}
+		}
+		return {bin:bin, pfx:pf, suf:sf, hex:h, na:na};
+	},
 Assemble : function(sc) {
 		var lines = sc.split(/\n/);
 		var i;
@@ -562,6 +610,7 @@ Assemble : function(sc) {
 		var ocp = 0;
 		var cop;
 		var fmt = "";
+		var efmt = [];
 		var cp = "";
 		var cq = "";
 		var pass = 0;
@@ -684,8 +733,9 @@ Assemble : function(sc) {
 					rtm = this.CheckReg(ctk.value);
 					fmt += rtm.name;
 					break;
-				case this.WV_MINUS.token:
 				case this.WV_PLUS.token:
+					fmt += "+";
+				case this.WV_MINUS.token:
 					exps.push(ctk);
 					break;
 				case this.WV_COMMA.token:
@@ -708,6 +758,8 @@ Assemble : function(sc) {
 			if(otr > -1) {
 			if(fmt == this.optable[otr].fmt) {
 				cq += "-" + ltr + "-OK-";
+				etk = this.Encode(this.optable[otr].enc,[]);
+				cq += etk.pfx + etk.bin + etk.suf;
 				break;
 			} else {
 				if(ltr == mtr) {
@@ -740,7 +792,8 @@ Assemble : function(sc) {
 			otr = -1;
 			mtr = 0;
 ventest:	while(ltr <= mtr) {
-			fmt = ""
+			fmt = "";
+			efmt.length = 0;
 			for(x in ltk) {
 				ctk = ltk[x];
 				switch(ctk.token) {
@@ -807,15 +860,18 @@ ventest:	while(ltr <= mtr) {
 					}
 					if(rtm) {
 						fmt += lname(rtm, ltr).name;
+						efmt.push(lname(rtm, ltr).enc);
 						if(mtr < rtm.length) { mtr = rtm.length; }
 					}
 					break;
 				case this.WV_REG.token:
 					rtm = this.CheckReg(ctk.value);
 					fmt += rtm.name;
+					efmt.push(rtm.enc);
 					break;
-				case this.WV_MINUS.token:
 				case this.WV_PLUS.token:
+					fmt += "+";
+				case this.WV_MINUS.token:
 					exps.push(ctk);
 					break;
 				case this.WV_COMMA.token:
@@ -838,6 +894,8 @@ ventest:	while(ltr <= mtr) {
 			if(otr > -1) {
 			if(fmt == this.optable[otr].fmt) {
 				cq += "-" + ltr + "-OK-";
+				etk = this.Encode(this.optable[otr].enc,efmt);
+				cq += etk.pfx + etk.bin + etk.suf;
 				break;
 			} else {
 				if(ltr == mtr) {
@@ -847,7 +905,7 @@ ventest:	while(ltr <= mtr) {
 						ltr = 0;
 						continue;
 					} else {
-						cq += "--OP ERROR--";
+						cq += "--OP ERROR--"+ fmt;
 						break;
 					}
 				}
