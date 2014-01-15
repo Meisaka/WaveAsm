@@ -69,7 +69,7 @@ Loadisf : function(isf) {
 		var lines = isf.split(/\n/);
 		var t, i;
 		var readmode = 0;
-		var y, z;
+		var y, z, w;
 		var x, ql = [];
 		var rgs;
 		var nam, lnv;
@@ -110,21 +110,14 @@ Loadisf : function(isf) {
 					} else {
 						x = y.split(/:/);
 						rgs = x[0].split(/,/);
+						ql = [];
+						x[1] = "L" + lnv.toString(10) + "+" + x[1];
+						for(w = 1; w < x.length; w++) {
+							ql.push(this.LineScan(x[w], false).tokens);
+						}
 						if(x[0] == "*") {
-							ql = [];
-							x.shift();
-							while(x.length > 0) {
-								ql.push(this.LineScan(x[0], false).tokens);
-								x.shift();
-							}
 							t = new WaveA_Lit("*","*",nam, ql);
 						} else {
-							ql = [];
-							x.shift();
-							while(x.length > 0) {
-								ql.push(this.LineScan(x[0], false).tokens);
-								x.shift();
-							}
 							t = new WaveA_Lit(parseInt(rgs[0]), parseInt(rgs[1]), nam, ql);
 						}
 						this.littable.push(t);
@@ -425,8 +418,10 @@ LineScan : function(lt, ids) {
 				if(lc == 1) {
 					if(cc == 'x') {
 						xs = 6;
+						cpl.st = i+1;
 					} else if(cc == 'b') {
 						xs = 7;
+						cpl.st = i+1;
 					} else if(cc.search(/[0-7]/) > -1) {
 						xs = 8;
 						cpl.st = i;
@@ -461,10 +456,10 @@ LineScan : function(lt, ids) {
 				if(cc.search(/[0-9]/) > -1) {
 					cpl.en = i;
 				} else if(cc == 'h') {
-					cpl.en = i;
+					cpl.en = i-1;
 					cpl.tx = lt.substring(cpl.st, cpl.en+1);
 					pr.push(tkn = this.makeToken(this.WV_NUMHEX, cpl.tx));
-					test += tkn.createSpan();
+					test += "0x" + tkn.createSpan();
 					xs = 0;
 				} else {
 					xs = 0;
@@ -484,7 +479,7 @@ LineScan : function(lt, ids) {
 					cpl.en = i-1;
 					cpl.tx = lt.substring(cpl.st, cpl.en+1);
 					pr.push(tkn = this.makeToken(this.WV_NUMHEX, cpl.tx));
-					test += tkn.createSpan();
+					test += "0x" + tkn.createSpan();
 					// Rescan needed
 					continue;
 				}
@@ -497,7 +492,7 @@ LineScan : function(lt, ids) {
 					cpl.en = i-1;
 					cpl.tx = lt.substring(cpl.st, cpl.en+1);
 					pr.push(tkn = this.makeToken(this.WV_NUMBIN, cpl.tx));
-					test += tkn.createSpan();
+					test += "0b" + tkn.createSpan();
 					// Rescan needed
 					continue;
 				}
@@ -549,21 +544,32 @@ LineScan : function(lt, ids) {
 		}
 		return {html: test, tokens: pr};
 	},
-Encode : function(et, beta) {
-		var x, i, cek, cet, wtf;
+Encode : function(et, beta, betv) {
+		var x, i, rin, cek, cet, wtf;
+		var nval, otlen = 0, ota = false, psk = false;
 		var rec = false;
 		var bin = "";
-		var h = "", pf = "", sf = "";
+		var h = "", pf = [], sf = [];
+		var pws = "0000";
+		var hextobin = function(h) {
+			var m = parseInt(h,16).toString(2);
+			while(m.length < 4) {
+				m = "0" + m;
+			}
+			return m;
+		};
 		var na = [];
 		for(x in et) {
 			cek = et[x];
+			otlen = 0;
+			ota = false;
 		for(i in cek) {
 			cet = cek[i];
+			if(psk) { psk = false; continue; }
 			switch(cet.token) {
 			case this.WV_PLUS.token:
 				break;
 			case this.WV_WS.token:
-				bin += " ";
 				break;
 			case this.WV_BSL.token:
 				rec = true;
@@ -572,18 +578,58 @@ Encode : function(et, beta) {
 				bin += cet.value;
 				break;
 			case this.WV_IDENT.token:
+				rin = parseInt(i) + 1;
+				if(((rin) < cek.length)) {
+					if(cek[rin].token == this.WV_NUMDEC.token) {
+						nval = parseInt(cek[rin].value,10);
+					}
+				}
+				switch(cet.value) {
+				case "L":
+					otlen = nval;
+					while(pws.length < otlen) { pws += "0"; }
+					psk = true;
+					break;
+				case "AL":
+					otlen = nval;
+					while(pws.length < otlen) { pws += "0"; }
+					ota = true;
+					psk = true;
+				default:
+					break;
+				}
+				break;
+			case this.WV_STAR.token:
+				wtf = betv.toString(2);
+				if(otlen > 0 && wtf.length < otlen) {
+					wtf = pws.substr(0,otlen-wtf.length) + wtf;
+				}
+				if(ota) {
+					sf.push( wtf );
+					ota = false;
+				} else {
+					bin += wtf;
+				}
 				break;
 			case this.WV_NUMDEC.token:
 				if(rec) {
 					rec = false;
-					wtf = this.Encode(beta[parseInt(cet.value,10)-1],[]);
+					rin = parseInt(cet.value,10)-1;
+					wtf = this.Encode(beta[rin],[],betv[rin]);
 					bin += wtf.bin;
-					sf += wtf.suf;
-					pf += wtf.pfx;
+					sf = sf.concat(wtf.suf);
+					pf = pf.concat(wtf.pfx);
+				} else {
+					wtf = parseInt(cet.value,10).toString(2);
+					if(otlen > 0 && wtf.length < otlen) {
+						wtf = pws.substr(0,otlen-wtf.length) + wtf;
+					}
+					bin += wtf;
 				}
 				break;
 			case this.WV_NUMHEX.token:
-				bin += cet.value;
+				wtf = cet.value.replace(/[0-9a-fA-f]/g,hextobin);
+				bin += wtf;
 				break;
 			case this.WV_NUMOCT.token:
 				break;
@@ -611,6 +657,7 @@ Assemble : function(sc) {
 		var cop;
 		var fmt = "";
 		var efmt = [];
+		var efvl = [];
 		var cp = "";
 		var cq = "";
 		var pass = 0;
@@ -641,6 +688,7 @@ Assemble : function(sc) {
 					q++;
 				}
 			}
+			return otr = q;
 		}
 		for(i in lines) {
 			ltk = this.LineScan(lines[i]);
@@ -651,7 +699,8 @@ Assemble : function(sc) {
 			otr = -1;
 			mtr = 0;
 			while(ltr <= mtr) {
-			fmt = ""
+			fmt = "";
+			exps.length = 0;
 			for(x in ltk.tokens) {
 				ctk = ltk.tokens[x];
 				switch(ctk.token) {
@@ -735,6 +784,7 @@ Assemble : function(sc) {
 					break;
 				case this.WV_PLUS.token:
 					fmt += "+";
+					break;
 				case this.WV_MINUS.token:
 					exps.push(ctk);
 					break;
@@ -758,8 +808,8 @@ Assemble : function(sc) {
 			if(otr > -1) {
 			if(fmt == this.optable[otr].fmt) {
 				cq += "-" + ltr + "-OK-";
-				etk = this.Encode(this.optable[otr].enc,[]);
-				cq += etk.pfx + etk.bin + etk.suf;
+				etk = this.Encode(this.optable[otr].enc,[],[]);
+				cq += etk.pfx + etk.bin + " " + etk.suf;
 				break;
 			} else {
 				if(ltr == mtr) {
@@ -784,6 +834,7 @@ Assemble : function(sc) {
 		fagn = true;
 		for(pass = 1; (pass < 7) && fagn; pass++) {
 		fagn = false;
+		vpc = 0;
 		for(i in linetable) {
 			ltk = linetable[i].t;
 			vps = 0;
@@ -793,7 +844,8 @@ Assemble : function(sc) {
 			mtr = 0;
 ventest:	while(ltr <= mtr) {
 			fmt = "";
-			efmt.length = 0;
+			exps.length = 0;
+			efmt.length = 0; efvl.length = 0;
 			for(x in ltk) {
 				ctk = ltk[x];
 				switch(ctk.token) {
@@ -801,6 +853,13 @@ ventest:	while(ltr <= mtr) {
 					cop = ctk.value.toUpperCase();
 					if(otr < 0) { otr = 0; }
 					OpNext(this.optable);
+					break;
+				case this.WV_LABEL.token:
+					rtm = scanIdent1(ctk.value);
+					if(rtm) {
+						rtm.v = vpc;
+						cq += "L:"+rtm.v.toString(16);
+					}
 					break;
 				case this.WV_IDENT.token:
 					rtm = scanIdent1(ctk.value);
@@ -811,6 +870,7 @@ ventest:	while(ltr <= mtr) {
 						mtr = 0;
 						break ventest;
 					}
+					// ident is a value, no break
 				case this.WV_NUMHEX.token:
 				case this.WV_NUMDEC.token:
 				case this.WV_NUMBIN.token:
@@ -860,17 +920,18 @@ ventest:	while(ltr <= mtr) {
 					}
 					if(rtm) {
 						fmt += lname(rtm, ltr).name;
-						efmt.push(lname(rtm, ltr).enc);
+						efmt.push(lname(rtm, ltr).enc); efvl.push(nval);
 						if(mtr < rtm.length) { mtr = rtm.length; }
 					}
 					break;
 				case this.WV_REG.token:
 					rtm = this.CheckReg(ctk.value);
 					fmt += rtm.name;
-					efmt.push(rtm.enc);
+					efmt.push(rtm.enc); efvl.push(0);
 					break;
 				case this.WV_PLUS.token:
 					fmt += "+";
+					break;
 				case this.WV_MINUS.token:
 					exps.push(ctk);
 					break;
@@ -894,8 +955,13 @@ ventest:	while(ltr <= mtr) {
 			if(otr > -1) {
 			if(fmt == this.optable[otr].fmt) {
 				cq += "-" + ltr + "-OK-";
-				etk = this.Encode(this.optable[otr].enc,efmt);
-				cq += etk.pfx + etk.bin + etk.suf;
+				etk = this.Encode(this.optable[otr].enc,efmt,efvl);
+				cq += etk.pfx.join("") + etk.bin + " " + etk.suf.join("");
+				vps = (etk.pfx.join("").length + etk.bin.length + etk.suf.join("").length);
+				cq += "{" +etk.pfx.join("").length;
+				cq += "," +etk.bin.length;
+				cq += "," +etk.suf.join("").length + "}";
+				vps /= parseInt(this.cputable["CPUM"]);
 				break;
 			} else {
 				if(ltr == mtr) {
