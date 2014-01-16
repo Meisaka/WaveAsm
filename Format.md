@@ -1,7 +1,7 @@
 WaveAsm output formats
 ====
 
-Format binary Flat [-ff] (default)
+Format binary Flat \[-ff\] (default)
 ----
 
 Flat binary format, contains no formatting, metadata or other info.
