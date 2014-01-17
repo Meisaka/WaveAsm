@@ -15,6 +15,7 @@ my %langtable = ( fileof1 => "Failed to open file: ", fileof2 => "",
 my @regtable = ( {reg => '*', nam => 'intern'} );
 my @littable = ( );
 my @incltable = ( );
+my @keywtable = ( );
 my %symtable;
 my @allfile;
 my $vpc = 0;
@@ -40,6 +41,14 @@ my @optable = (
 print STDERR "Wave Asm - version 0.2.0\n";
 foreach(@ARGV) {
 	if(/^--(.*)/) {
+		my $flags = $1;
+		if($flags =~ /^A=(.*)$/) {
+			print STDERR "Use ISF $1\n";
+			$instructionsetfile = $1;
+			if(not ($instructionsetfile =~ /\.isf$/)) {
+				$instructionsetfile .= '.isf';
+			}
+		}
 	} elsif (/^-(.*)/) {
 		my $flags = $1;
 		if($flags =~ /([Vv]*)/) {
@@ -50,11 +59,6 @@ foreach(@ARGV) {
 			$binformat = 's';
 		} elsif($flags eq 'fE') {
 			$binformat = 'E';
-		} elsif($flags =~ /A(.*)/) {
-			$instructionsetfile = $1;
-			if(not ($instructionsetfile =~ /\.isf$/)) {
-				$instructionsetfile .= '.isf';
-			}
 		}
 	} else {
 		push @asmqueue, $_;
@@ -95,6 +99,27 @@ sub LoadInstructions {
 			} elsif(/:/) {
 				my ($k, $v) = split(':', $_);
 				$cputable{$k} = $v;
+			}
+		} elsif(/<KEYWORD>/ .. /<\/KEYWORD>/) {
+			if(/^\W*#/ or /\</) {
+			} elsif(/^\+/) {
+				print STDERR "AttribSet: $_\n" if($verbose > 4);
+				s/^\+//;
+				%att = ();
+				@attribs = split(',', $_);
+				for my $a (@attribs) {
+					if($a =~ /^N"([^"]*)"/) {
+						$att{nam} = $1;
+					}
+				}
+			} else {
+				@creg = split(':', $_);
+				if($creg[1] == undef) {
+					push @keywtable, ({keyw => $creg[0], nam => $att{nam}, encode => ''});
+				} else {
+					push @keywtable, ({keyw => $creg[0], nam => $att{nam}, encode => $creg[1]});
+				}
+				print STDERR "KEYWORD: $creg[0] $creg[1] \n" if($verbose > 4);
 			}
 		} elsif(/<REG>/ .. /<\/REG>/) {
 			if(/^\W*#/ or /\</) {
@@ -224,6 +249,11 @@ sub DecodeSymbol {
 	for my $r (@regtable) {
 		if(uc($r->{reg}) eq uc($sym)) {
 			return ("reg", $r);
+		}
+	}
+	for my $k (@keywtable) {
+		if(uc($k->{keyw}) eq uc($sym)) {
+			return ("keyw", $k);
 		}
 	}
 	my $r = $symtable{$sym};
@@ -387,6 +417,9 @@ sub DecodeSymbols {
 				if($type eq "reg") {
 					push @lfs, $vec->{nam};
 					push @encode, $vec->{encode};
+				} elsif($type eq "keyw") {
+					push @lfs, $vec->{nam};
+					push @encode, $vec->{encode} if($vec->{encode} ne '');
 				} elsif($type eq "lit") {
 					push @lfs, $vec->{nam};
 					push @encode, $vec->{encode}. "+$v";
