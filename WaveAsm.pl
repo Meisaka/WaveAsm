@@ -22,6 +22,8 @@ my $vinstrend = 0;
 my $errors = 0;
 my $flagpass = 0;
 my $verbose = 1;
+my $binformat = 'f';
+my @asmqueue = ( );
 # CPU specs (these are replaced in loaded file)
 my %cputable = (ISN => "NONE", FILEW => 8, CPUW => 8, CPUM => 8, CPUE => "LE", FILEE => "LE", ALIGN => 0);
 
@@ -36,6 +38,30 @@ my @optable = (
 );
 
 print STDERR "Wave Asm - version 0.2.0\n";
+foreach(@ARGV) {
+	if(/^--(.*)/) {
+	} elsif (/^-(.*)/) {
+		my $flags = $1;
+		if($flags =~ /([Vv]*)/) {
+			$verbose += length($1);
+		} elsif($flags eq 'ff') {
+			$binformat = 'f';
+		} elsif($flags eq 'fs') {
+			$binformat = 's';
+		} elsif($flags eq 'fE') {
+			$binformat = 'E';
+		} elsif($flags =~ /A(.*)/) {
+			$instructionsetfile = $1;
+			if(not ($instructionsetfile =~ /\.isf$/)) {
+				$instructionsetfile .= '.isf';
+			}
+		}
+	} else {
+		push @asmqueue, $_;
+	}
+}
+
+# load ISF
 LoadInstructions( $instructionsetfile );
 print STDERR "<optable>\n" if($verbose > 2);
 foreach my $o (@optable) {
@@ -45,18 +71,12 @@ print STDERR "\n<regtable>\n" if($verbose > 2);
 foreach my $o (@regtable) {
 	print STDERR "$o->{reg} $o->{nam} $o->{encode} " if($verbose > 2);
 }
-foreach(@ARGV) {
-	if(/^--(.*)/) {
-	} elsif (/^-(.*)/) {
-		my $flags = $1;
-		if($flags =~ /([Vv]*)/) {
-			$verbose += length($1);
-		}
-	} else {
-		@allfile = (); # clear file
-		%symtable = ();
-		Assemble( $_, ($_ . ".lst") , ($_ . ".bin"));
-	}
+
+# assemble files
+foreach(@asmqueue) {
+	@allfile = (); # clear file
+	%symtable = ();
+	Assemble( $_, ($_ . ".lst") , ($_ . ".bin"));
 }
 
 exit;
@@ -552,7 +572,7 @@ sub Pass2 {
 		my $fname = @incltable[$fnum - 1]->{f};
 		$opname = uc $opname;
 		$vinstrend = $l->{ilen};
-		print STDERR join("\t",($l->{lnum},sprintf("%08x",$vpc),$label,$opname,$linearg)) . "\t"  if($verbose > 1);
+		print STDERR join("\t",($l->{lnum},sprintf("%08x",$vpc),$label,$opname,$linearg)) . "\t"  if($verbose > 2);
 		if($label ne '' && $opname ne '.EQU') {
 			print STDERR "SYMGEN: $label ".$symtable{$label}{type}."\n" if($verbose > 2);
 			if($symtable{$label}{type} ne "") {
@@ -607,7 +627,7 @@ sub Pass2 {
 		} else {
 			$found = -1; #no opcode on line
 			$addrmode = -1;
-			print STDERR "\n" if($verbose > 1 && $label ne '');
+			print STDERR "\n" if($verbose > 2 && $label ne '');
 		}
 		if($found == 0) {
 			print STDERR "$langtable{error}: $fname:$l->{lnum}:",
@@ -661,7 +681,7 @@ sub Pass2 {
 					print STDERR "\n".join(' ', @words) . "\n" if($verbose > 3);
 					my ($avl, $dat, @bytes) = BinSplit(@words);
 					my $txtbyte = join(' ', @bytes);
-					print STDERR $txtbyte . "\n" if($verbose > 1);
+					print STDERR $txtbyte . "\n" if($verbose > 2);
 					# encode data
 					$l->{addr} = $vpc;
 					$vinstrend = ($avl / $cputable{CPUM});
@@ -700,12 +720,12 @@ sub Pass2 {
 				print STDERR "AVC: $avl $lavl\n" if($verbose > 3);
 				$flagpass++;
 				my $txtbyte = join('', @lbytes);
-				print STDERR $txtbyte . "\n" if($verbose > 1);
+				print STDERR $txtbyte . "\n" if($verbose > 2);
 				$l->{byte} = $txtbyte;
 				$l->{dat} = $ldat;
 			} else {
 				my $txtbyte = join('', @bytes);
-				print STDERR $txtbyte . "\n" if($verbose > 1);
+				print STDERR $txtbyte . "\n" if($verbose > 2);
 				$l->{byte} = $txtbyte;
 				$l->{dat} = $dat;
 			}
@@ -802,9 +822,56 @@ sub LoadInclude {
 			}
 		}
 		push @allfile, {lnum => $., fnum => $fnum, ltxt => $_, label => $label, op => $opname, arg => $linearg};
-		print STDERR join("\t",($.,$label,$opname,$linearg,$enc))."\n" if($verbose > 1);
+		print STDERR join("\t",($.,$label,$opname,$linearg,$enc))."\n" if($verbose > 2);
 	}
 	close ISF;
+}
+
+sub WriteListing {
+	my ($outf) = @_;
+	unless( open(OSF, ">", $outf) ) {
+		print STDERR $langtable{fileof1} . $outf . $langtable{fileof2} . "\n";
+		return;
+	}
+	foreach my $l (@allfile) {
+		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
+		print OSF join("\t",($l->{lnum},sprintf("%08x",$l->{addr}),$label,$opname,$linearg),$l->{byte}) . "\n" ;
+	}
+	print OSF "Symbols:\n" if($verbose > 0);
+	foreach my $l (keys %symtable) {
+		printf OSF "%08x  %s\n",$symtable{$l}{val},$l
+	}
+	close OSF;
+}
+
+sub WriteFlat {
+	my ($outf) = @_;
+	unless( open(OBF, ">", $outf) ) {
+		print STDERR $langtable{fileof1} . $outf . $langtable{fileof2} . "\n";
+		return;
+	} else {
+		binmode OBF;
+	}
+	my $vpi = undef;
+	print STDERR "Writting flat binary to $outf\n" if($verbose > 1);
+	foreach my $l (@allfile) {
+		if($vpi == undef) { $vpi = $l->{addr}; }
+		if($vpi < $l->{addr}) {
+			if($vpi + $cputable{ALIGN} >= $l->{addr}) {
+				my $align = $vpi % $cputable{ALIGN};
+				my $padsz = ($cputable{ALIGN} - $align) if($align > 0); # align words in file
+				for(my $i = 0; $i < $padsz; $i++) { print OBF "\0"; }
+				print STDERR "Wrote $padsz null bytes\n" if($verbose > 2);
+				$vpi += $padsz;
+			} else {
+				print STDERR "Address break in binary flat file ", sprintf("%08x to %08x",$vpi, $l->{addr}), "\nLine: $l->{op} $l->{arg}\n" if($verbose > 1);
+				$vpi = $l->{addr};
+			}
+		}
+		print OBF $l->{dat};
+		$vpi += length($l->{dat});
+	}
+	close OBF;
 }
 
 sub Assemble {
@@ -823,29 +890,9 @@ sub Assemble {
 	Pass2();
 	} while(($assmpass++) < 9 && $flagpass >= 1 && $errors < 1);
 	if($errors == 0) {
-		unless( open(OSF, ">", $outfile) ) {
-			print STDERR $langtable{fileof1} . $outfile . $langtable{fileof2} . "\n";
-			return;
-		}
-		unless( open(OBF, ">", $outbinfile) ) {
-			print STDERR $langtable{fileof1} . $outbinfile . $langtable{fileof2} . "\n";
-			close OSF;
-			return;
-		} else {
-			binmode OBF;
-		}
 		print STDERR "Complete!\n" if($verbose > 0);
-		foreach my $l (@allfile) {
-		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
-		print OSF join("\t",($l->{lnum},sprintf("%08x",$l->{addr}),$label,$opname,$linearg),$l->{byte}) . "\n" ;
-			print OBF $l->{dat};
-		}
-		print OSF "Symbols:\n" if($verbose > 0);
-		foreach my $l (keys %symtable) {
-			printf OSF "%08x  %s\n",$symtable{$l}{val},$l
-		}
-		close OSF;
-		close OBF;
+		WriteListing($outfile);
+		WriteFlat($outbinfile);
 	} else {
 		print STDERR "Errors in assembly.\n";
 	}
