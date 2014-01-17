@@ -104,11 +104,22 @@ TODO
     LitVal := "*" | number(inclusive range)
     LitDef := LitVal(lower) ["," LitVal(upper)] [":" Encoding [":" Encoding ...] ]
 
+GROUP Section
+Groups define a single name to a number of different argument formats, and their encodings
+
+Format overview:
+
+    format := ( [LitName | RegName | "#" | "[" | "]" | "(" | ")" | "+"] )*
+    paramformat := string(format)
+	Group := string(GroupName) ":" paramformat ":" Encoding
+
 OPCODE Section
 ----
-TODO
+Defines Opcodes, their argument format (if any), and encoding.
 
-    format := ( [LitName | RegName | "," | "[" | "]" | "(" | ")" | "+"] )*
+Format overview:
+
+    format := ( [LitName | RegName | "," | "#" | "[" | "]" | "(" | ")" | "+"] )*
     paramformat := string(format)
     OpName := ( LETTER | "." | "_" ) (LETTER | DIGIT | "." | "_")*
     paramsv1 := [ number(argument count) ] [ "," "r"(relative mode) ]
