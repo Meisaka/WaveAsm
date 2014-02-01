@@ -712,8 +712,10 @@ Assemble : function(sc) {
 				case this.WV_LABEL.token:
 					rtm = scanIdent1(ctk.value);
 					if(rtm) {
+						if(i+1 != rtm.l) {
 						cq += "--ERROR LABEL DUP ("+i+1 +","+ rtm.l+")--";
 						nval = rtm.v;
+						}
 					} else {
 						symtable.push({n:ctk.value,v:"*",l:i+1});
 						nval = "*";
@@ -866,9 +868,14 @@ ventest:	while(ltr <= mtr) {
 					if(rtm) {
 						nval = rtm.v;
 					} else {
-						cq += "--ERROR NO IDENT--";
-						mtr = 0;
-						break ventest;
+						if(ctk.value.search(/^[0-9A-Fa-f]\+h$/)) {
+							cq += "-AHC-";
+							nval = parseInt(ctk.value.substr(0,ctk.value.length-1),16);
+						} else {
+							cq += "--ERROR NO IDENT--";
+							mtr = 0;
+							break ventest;
+						}
 					}
 					// ident is a value, no break
 				case this.WV_NUMHEX.token:
