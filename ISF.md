@@ -67,6 +67,17 @@ Lines in the HEAD section are key-value pairs seperated by the ":" character.
 - FILEW - number - bit size of binary file data (8 by default), should not be changed in most cases.
 - ALIGN - number - modulus that opcodes are aligned to in memory words, 0 or 1 (defaults) means no alignment.
 
+KEYWORD Section
+----
+TODO
+
+    Attribtype := char*1
+    Attrib := Attribtype value
+    Attribs := "+" Attrib ["," Attrib]*
+    NameAttrib := "N" string(name)
+    KeywordName := ( LETTER | "_" ) (LETTER | "_")*
+    KeywordDef := KeywordName [ ":" Encoding ]
+
 REG Section
 ----
 TODO
@@ -79,7 +90,7 @@ TODO
     IndexAttrib := "I" number(index bits)
     DataAttrib := "D" number(data bits)
     RegName := ( LETTER | "%" | "_" ) (LETTER | DIGIT | "%" | "_")*
-    RegDef := RegName ["," RegName ...] [":" Encoding [":" Encoding] ]
+    RegDef := RegName ["," RegName ...] [":" Encoding ]
 
 LIT Section
 ----
@@ -93,11 +104,22 @@ TODO
     LitVal := "*" | number(inclusive range)
     LitDef := LitVal(lower) ["," LitVal(upper)] [":" Encoding [":" Encoding ...] ]
 
+GROUP Section
+Groups define a single name to a number of different argument formats, and their encodings
+
+Format overview:
+
+    format := ( [LitName | RegName | "#" | "[" | "]" | "(" | ")" | "+"] )*
+    paramformat := string(format)
+	Group := string(GroupName) ":" paramformat ":" Encoding
+
 OPCODE Section
 ----
-TODO
+Defines Opcodes, their argument format (if any), and encoding.
 
-    format := ( [LitName | RegName | "," | "[" | "]" | "(" | ")" | "+"] )*
+Format overview:
+
+    format := ( [LitName | RegName | "," | "#" | "[" | "]" | "(" | ")" | "+"] )*
     paramformat := string(format)
     OpName := ( LETTER | "." | "_" ) (LETTER | DIGIT | "." | "_")*
     paramsv1 := [ number(argument count) ] [ "," "r"(relative mode) ]

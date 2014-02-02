@@ -15,6 +15,7 @@ my %langtable = ( fileof1 => "Failed to open file: ", fileof2 => "",
 my @regtable = ( {reg => '*', nam => 'intern'} );
 my @littable = ( );
 my @incltable = ( );
+my @keywtable = ( );
 my %symtable;
 my @allfile;
 my $vpc = 0;
@@ -22,11 +23,16 @@ my $vinstrend = 0;
 my $errors = 0;
 my $flagpass = 0;
 my $verbose = 1;
+my $binformat = 'f';
+my $exten = '.ffi';
+my @asmqueue = ( );
 # CPU specs (these are replaced in loaded file)
 my %cputable = (ISN => "NONE", FILEW => 8, CPUW => 8, CPUM => 8, CPUE => "LE", FILEE => "LE", ALIGN => 0);
 
-# build-in instructions
 my @optable = (
+);
+# build-in macros
+my @macrotable = (
 	{op => '.ORG', arc => 1, arf => '*', encode => 'M'},
 	{op => '.EQU', arc => 1, arf => '*', encode => 'M'},
 	{op => '.DAT', arc => -1, arf => '*', encode => 'M'},
@@ -35,7 +41,37 @@ my @optable = (
 	{op => '.DD', arc => -1, arf => '*', encode => 'M'}
 );
 
-print STDERR "Wave Asm - version 0.2.0\n";
+print STDERR "Wave Asm - version 0.3.0\n";
+foreach(@ARGV) {
+	if(/^--(.*)/) {
+		my $flags = $1;
+		if($flags =~ /^A=(.*)$/) {
+			print STDERR "Use ISF $1\n";
+			$instructionsetfile = $1;
+			if(not ($instructionsetfile =~ /\.isf$/)) {
+				$instructionsetfile .= '.isf';
+			}
+		}
+	} elsif (/^-(.*)/) {
+		my $flags = $1;
+		if($flags =~ /([Vv]*)/) {
+			$verbose += length($1);
+		} elsif($flags eq 'ff') {
+			$binformat = 'f';
+			$exten = '.ffi';
+		} elsif($flags eq 'fs') {
+			$binformat = 's';
+			$exten = '.s19';
+		} elsif($flags eq 'fE') {
+			$binformat = 'E';
+			$exten = '.a';
+		}
+	} else {
+		push @asmqueue, $_;
+	}
+}
+
+# load ISF
 LoadInstructions( $instructionsetfile );
 print STDERR "<optable>\n" if($verbose > 2);
 foreach my $o (@optable) {
@@ -45,18 +81,16 @@ print STDERR "\n<regtable>\n" if($verbose > 2);
 foreach my $o (@regtable) {
 	print STDERR "$o->{reg} $o->{nam} $o->{encode} " if($verbose > 2);
 }
-foreach(@ARGV) {
-	if(/^--(.*)/) {
-	} elsif (/^-(.*)/) {
-		my $flags = $1;
-		if($flags =~ /([Vv]*)/) {
-			$verbose += length($1);
-		}
-	} else {
-		@allfile = (); # clear file
-		%symtable = ();
-		Assemble( $_, ($_ . ".lst") , ($_ . ".bin"));
+
+# assemble files
+foreach(@asmqueue) {
+	@allfile = (); # clear file
+	%symtable = ();
+	my $filen = $_;
+	if($filen =~ /(.*)(\.[aA][sS][mM]|\.s)$/) {
+		$filen = $1;
 	}
+	Assemble( $_, ($filen . ".lst") , ($filen . $exten));
 }
 
 exit;
@@ -75,6 +109,27 @@ sub LoadInstructions {
 			} elsif(/:/) {
 				my ($k, $v) = split(':', $_);
 				$cputable{$k} = $v;
+			}
+		} elsif(/<KEYWORD>/ .. /<\/KEYWORD>/) {
+			if(/^\W*#/ or /\</) {
+			} elsif(/^\+/) {
+				print STDERR "AttribSet: $_\n" if($verbose > 4);
+				s/^\+//;
+				%att = ();
+				@attribs = split(',', $_);
+				for my $a (@attribs) {
+					if($a =~ /^N"([^"]*)"/) {
+						$att{nam} = $1;
+					}
+				}
+			} else {
+				@creg = split(':', $_);
+				if($creg[1] == undef) {
+					push @keywtable, ({keyw => $creg[0], nam => $att{nam}, encode => ''});
+				} else {
+					push @keywtable, ({keyw => $creg[0], nam => $att{nam}, encode => $creg[1]});
+				}
+				print STDERR "KEYWORD: $creg[0] $creg[1] \n" if($verbose > 4);
 			}
 		} elsif(/<REG>/ .. /<\/REG>/) {
 			if(/^\W*#/ or /\</) {
@@ -143,19 +198,21 @@ sub LoadInstructions {
 }
 
 sub DecodeValue {
-	my ($sym) = @_;
+	my ($sym, $tkval, $nvc) = @_;
 	my $v;
 	my @v;
-	if ($sym =~ /^(')\\(.)\1$/) { # Ascii escaped literal
-		$v = $2;
-		$v =~ tr/nrt0/\x0A\x0D\x09\0/; #translate lf cr tab nul, others as is.
+	if ($tkval == 10) { # Ascii (escaped) literal
+		@v = split('',$sym);
+		if($v[0] eq '\\') {
+			$v = $v[1];
+			$v =~ tr/nrt0/\x0A\x0D\x09\0/; #translate lf cr tab nul, others as is.
+		} else {
+			$v = $v[0];
+		}
 		$v = ord($v);
 		return ("val",$v);
-	} elsif ($sym =~ /^(')([^'\\])\1$/) { # Ascii literal
-		$v = ord($2);
-		return ("val",$v);
-	} elsif($sym =~ /^"(.*)"$/) { # String literal (TODO)
-		$v = $1;
+	} elsif($tkval == 11) { # String literal (TODO)
+		$v = $sym;
 		$v =~ s/\\r/\r/g;
 		$v =~ s/\\n/\n/g;
 		$v =~ s/\\t/\t/g;
@@ -168,25 +225,25 @@ sub DecodeValue {
 			$v .= "+". ord($c);
 		}
 		return ("str",$v);
-	} elsif($sym =~ /^(-*)(0[xX][0-9a-fA-F]+)$/) { # Hexadecimal 0x...
-		$v = oct($2);
-		$v = -$v if(length($1) % 2 == 1);
+	} elsif($tkval == 6) { # Hexadecimal 0x...
+		$v = oct("0x$sym");
+		$v = -$v if(length($nvc) % 2 == 1);
 		return ("val",$v);
-	} elsif($sym =~ /^(-*)(0[bB][01]+)$/) { # Binary 0b...
-		$v = oct($2);
-		$v = -$v if(length($1) % 2 == 1);
+	} elsif($tkval == 8) { # Binary 0b...
+		$v = oct("0b$sym");
+		$v = -$v if(length($nvc) % 2 == 1);
 		return ("val",$v);
-	} elsif($sym =~ /^(-*)([0-9a-fA-F]+)([hH])$/) { # Hexadecimal ...h
-		$v = oct("0x" . $2);
-		$v = -$v if(length($1) % 2 == 1);
+	} elsif($tkval == 4) { # Hexadecimal ...h
+		$v = oct("0x$sym");
+		$v = -$v if(length($nvc) % 2 == 1);
 		return ("val",$v);
-	} elsif($sym =~ /^(-*)(0[0-7]+)$/) { # octal 0... just in case ;)
-		$v = oct($2);
-		$v = -$v if(length($1) % 2 == 1);
+	} elsif($tkval == 7) { # octal 0... just in case ;)
+		$v = oct($sym);
+		$v = -$v if(length($nvc) % 2 == 1);
 		return ("val",$v);
-	} elsif($sym =~ /^(-*)([0-9]+)$/) { # decimal
-		$v = ($2);
-		$v = -$v if(length($1) % 2 == 1);
+	} elsif($tkval == 5) { # decimal
+		$v = ($sym) + 0;
+		$v = -$v if(length($nvc) % 2 == 1);
 		return ("val",$v);
 	}
 	print STDERR "[$sym]UNDEF|" if($verbose > 4);
@@ -194,18 +251,13 @@ sub DecodeValue {
 }
 
 sub DecodeSymbol {
-	my ($sym, $itr, $rel) = @_;
+	my ($sym, $minus, $tknum, $itr, $rel) = @_;
 	return ("null", undef) if(!defined($sym));
 	return ("null", undef) if($sym eq "");
 	my $v;
 	my $vt;
 	my $itab = @littable;
 	my $ci = 0;
-	for my $r (@regtable) {
-		if(uc($r->{reg}) eq uc($sym)) {
-			return ("reg", $r);
-		}
-	}
 	my $r = $symtable{$sym};
 	if($r->{val} ne '') {
 		if($r->{val} eq '*') {
@@ -242,7 +294,7 @@ sub DecodeSymbol {
 		}
 	}
 
-	($vt, $v) = DecodeValue($sym);
+	($vt, $v) = DecodeValue($sym, $tknum, $minus);
 	if ($vt eq 'val') {
 		if($itr == -1) {
 			return ("val", undef, $itab, $v);
@@ -319,12 +371,344 @@ sub SplitElem {
 	return @results;
 }
 
+sub TestOp {
+	my ($opname) = @_;
+	for my $i ( @optable ) {
+		if(uc($i->{op}) eq uc($opname)) {
+			return (1, $i);
+		}
+	}
+	return (0, undef);
+}
+sub TestMacro {
+	my ($sym) = @_;
+	for my $i ( @macrotable ) {
+		if(uc($i->{op}) eq uc($sym)) {
+			return (1, $i);
+		}
+	}
+	return (0, undef);
+}
+sub TestReg {
+	my ($sym) = @_;
+	for my $r (@regtable) {
+		if(uc($r->{reg}) eq uc($sym)) {
+			return (1, $r);
+		}
+	}
+	return (0, undef);
+}
+sub TestKeyw {
+	my ($sym) = @_;
+	for my $k (@keywtable) {
+		if(uc($k->{keyw}) eq uc($sym)) {
+			return (1, $k);
+		}
+	}
+	return (0, undef);
+}
+
+sub TokenizeLine {
+	my ($line, $pstype) = @_;
+	my @chars = split('',$line);
+	my @results = ();
+	my $item;
+	my $last = 0;
+	my $state = 0;
+	my $skipc = 0;
+	my $lss = 0;
+	my @test;
+	push @chars, '';
+	for my $c (@chars) {
+		if($state == 1) {
+			if($last == 0 and $c eq '"') {
+				$state = 0;
+				$skipc = 1;
+				# Add token
+				push @results, {tkn=>11, v=>$item}; $item = '';
+			} elsif($c eq '\\') {
+				$last = 1;
+				$item .= $c;
+			} else {
+				$last = 0;
+				$item .= $c;
+			}
+		} elsif($state == 2) {
+			if($last == 0 and $c eq '\'') {
+				$state = 0;
+				$skipc = 1;
+				# Add token
+				push @results, {tkn=>10, v=>$item}; $item = '';
+			} elsif($c eq '\\') {
+				$last = 1;
+				$item .= $c;
+			} else {
+				$last = 0;
+				$item .= $c;
+			}
+		} elsif($state == 3) {
+			if($c =~ /[_.a-zA-Z0-9]/) {
+				$item .= $c;
+			} elsif($last == 0 and $c eq ':') {
+				$state = 0;
+				# ADD token
+				$skipc = 1;
+				push @results, {tkn=>2, v=>$item}; $item = '';
+			} else {
+				$state = 0;
+				# add token
+				if($last == 1) {
+					#label
+					push @results, {tkn=>2, v=>$item}; $item = '';
+				} else {
+					if((@test = TestOp($item))[0] == 1) {
+						push @results, {tkn=>3, v=>$item, a=>$test[1]}; $item = '';
+						$lss = 3;
+					} elsif( (@test = TestMacro($item))[0] == 1) {
+						push @results, {tkn=>12, v=>$item, a=>$test[1]}; $item = '';
+						$lss = 2;
+					} else {
+						if( (@test = TestReg($item))[0] == 1) {
+							push @results, {tkn=>9, v=>$item, a=>$test[1]}; $item = '';
+						} elsif( (@test = TestKeyw($item))[0] == 1) {
+							push @results, {tkn=>26, v=>$item, a=>$test[1]}; $item = '';
+						} else {
+							if($lss < 1) {
+								# bare label
+								push @results, {tkn=>2, v=>$item}; $item = '';
+								$lss = 1;
+							} else {
+								# ident/A-f...h const
+								push @results, {tkn=>4, v=>$item}; $item = '';
+								#push @results, {tkn=>6, v=>$item};
+							}
+						}
+					}
+				}
+			}
+		} elsif($state == 4) {
+			if($last == 1) {
+				if($c eq 'x') {
+					$state = 6;
+				} elsif($c eq 'b') {
+					$state = 7;
+				} elsif($c =~ /[0-7]/) {
+					$state = 8;
+					$item .= "0$c";
+				} elsif($c =~ /[0-9a-fhA-F]/) {
+					if($c eq 'h') {
+						# add 0h
+						push @results, {tkn=>6, v=>$item}; $item = '';
+					} else {
+						$state = 6;
+						$item .= $c;
+					}
+				} else {
+					$state = 0;
+					# add 0
+					push @results, {tkn=>5, v=>'0'}; $item = '';
+				}
+			} else {
+				if($c eq '0') {
+					$last = 1;
+				} elsif($c =~ /[0-9]/) {
+					$state = 5;
+					$item .= $c
+				} elsif($c =~ /[0-9a-fA-Fh]/) {
+					$state = 6;
+					$item .= $c
+				} else {
+					$state = 0;
+					#add token
+					push @results, {tkn=>5, v=>$item}; $item = '';
+				}
+			}
+		} elsif($state == 5) {
+			if($c =~ /[0-9]/) {
+				$item .= $c;
+			} elsif($c eq 'h') {
+				# add as hex
+				push @results, {tkn=>6, v=>$item}; $item = '';
+				$state = 0;
+			} else {
+				$state = 0;
+				# add dec
+				print "TKN-ADEC " if($verbose > 5);
+				push @results, {tkn=>5, v=>$item}; $item = '';
+			}
+		} elsif($state == 6) {
+			if($c =~ /[0-9a-fA-F]/) {
+				$item .= $c;
+			} else {
+				$state = 0;
+				if($c eq 'h') { $skipc = 1; }
+				# add hex
+				push @results, {tkn=>6, v=>$item}; $item = '';
+			}
+		} elsif($state == 7) {
+			if($c =~ /[01]/) {
+				$item .= $c;
+			} else {
+				$state = 0;
+				#add bin
+				push @results, {tkn=>8, v=>$item}; $item = '';
+			}
+		} elsif($state == 8) {
+			if($c =~ /[0-7]/) {
+				$item .= $c;
+			} else {
+				$state = 0;
+				#add oct
+				push @results, {tkn=>7, v=>$item}; $item = '';
+			}
+		} elsif($state == 9) {
+			$item .= $c;
+		} elsif($state == 10) {
+			if($c =~ /[a-zA-Z]/) {
+				$item .= $c;
+			} else {
+				$state = 0;
+				# add gen ident
+				push @results, {tkn=>4, v=>$item}; $item = '';
+			}
+		}
+		if($state == 0) {
+			if($skipc == 1) {
+				$skipc = 0;
+			} else {
+				# parse
+				if($pstype == 0 and $c =~ /[_.%a-zA-Z]/) {
+					$item = $c;
+					$state = 3;
+					$last = 0;
+				} elsif($pstype == 1 and $c eq '%') {
+					$state = 7;
+					$last = 0;
+				} elsif($pstype == 1 and $c =~ /[a-zA-Z]/) {
+					$state = 10;
+					$last = 0;
+					$item .= $c;
+				} elsif($c eq '0') {
+					$state = 4;
+					if($c eq '0') {
+						$last = 1;
+					} else {
+						$last = 0;
+						$item .= $c;
+					}
+				} elsif($c =~ /[1-9]/) {
+					$state = 5;
+					$last = 0;
+					$item = $c;
+				} elsif($c eq '"') {
+					$state = 1;
+					$last = 0;
+				} elsif($c eq '\'') {
+					$state = 2;
+					$last = 0;
+				} elsif($c eq '') {
+					push @results, {tkn=>1, v=>''};
+				} else {
+					# special chars
+					if($c =~ /[ \t]/) {
+						if($last != 2) {
+							$last = 2;
+							# add ws token
+							push @results, {tkn=>21, v=>' '};
+						}
+					} elsif($c eq ':') {
+						$state = 3;
+						$last = 1;
+					} elsif($c eq ';') {
+						$state = 9;
+					} elsif($c eq ',') {
+						push @results, {tkn=>20, v=>$c};
+					} elsif($c eq '+') {
+						push @results, {tkn=>13, v=>$c};
+					} elsif($c eq '-') {
+						push @results, {tkn=>14, v=>$c};
+					} elsif($c eq '=') {
+						#
+					} elsif($c eq '#') {
+						push @results, {tkn=>22, v=>$c};
+					} elsif($c eq '*') {
+						push @results, {tkn=>15, v=>$c};
+					} elsif($c eq '/') {
+						push @results, {tkn=>24, v=>$c};
+					} elsif($c eq '\\') {
+						push @results, {tkn=>25, v=>$c};
+					} elsif($c eq '$') {
+						#
+					} elsif($c eq '&') {
+						#
+					} elsif($c eq '!') {
+						#
+					} elsif($c eq '[') {
+						push @results, {tkn=>16, v=>$c};
+					} elsif($c eq ']') {
+						push @results, {tkn=>17, v=>$c};
+					} elsif($c eq '(') {
+						push @results, {tkn=>18, v=>$c};
+					} elsif($c eq ')') {
+						push @results, {tkn=>19, v=>$c};
+					} elsif($c eq '<') {
+					} elsif($c eq '>') {
+					} elsif($c eq '{') {
+					} elsif($c eq '}') {
+					} elsif($c eq '|') {
+					} elsif($c eq '^') {
+					} elsif($c eq '@') {
+					} elsif($c eq '~') {
+					} else {
+						# what?
+					}
+				}
+			}
+		}
+	}
+	return @results;
+}
+
+sub ParseSymbol {
+	my ($allsym, $itr, $arc) = @_;
+	my $userel = 0;
+	my (undef, $mrel) = split(',',$arc);
+	if($mrel =~ /r/) {
+		$userel = 1;
+	}
+	my $lss = 0;
+	for my $tkn (@$allsym) {
+		my $arg = $tkn->{v};
+		my $elem = $tkn->{tkn};
+		my $minus = "";
+		if($tkn->{tkn} == 12) {
+			$lss = 3;
+			next;
+		}
+		if($lss > 2) {
+			if($tkn->{tkn} != 20 and $tkn->{tkn} != 1) {
+				if($tkn->{tkn} == 21) { next; }
+			if($elem == 16) {
+			} elsif($elem == 17) {
+			} elsif($elem == 13) {
+			} elsif($elem == 14) {
+				$minus = "-";
+			} elsif($elem == 9) {
+			} elsif($elem == 26) {
+			} else {
+				return DecodeSymbol($arg, $minus, $elem, $itr, $userel);
+			}
+			}
+		}
+	}
+	return ('nul',undef,0, "");
+}
+
 sub DecodeSymbols {
 	my ($allsym, $itr, $arc, $wordsz) = @_;
 	my $format;
 	my @format = ();
 	my $maxitr = 0;
-	my @decarg = split(/(['"](?:\\['"]|[^'"])*['"])|,/,$allsym);
 	my @encode = ();
 	my $userel = 0;
 	my ($iis, $mrel) = split(',',$arc);
@@ -335,38 +719,52 @@ sub DecodeSymbols {
 	if($mrel =~ /r/) {
 		$userel = 1;
 	}
-	for my $arg (@decarg) {
-		if($arg =~ /^[ \t]*$/) { next; }
-		print STDERR "DECARG: '$arg' " if($verbose > 5);
-		my @lfs = ();
+	my $lss = 0;
+	my @lfs = ();
+	for my $tkn (@$allsym) {
+		print STDERR "T$tkn->{tkn}:$tkn->{v} " if($verbose > 5);
+		my $arg = $tkn->{v};
+		my $elem = $tkn->{tkn};
 		my $minus = "";
-		#my @wsa = split(/((?:"(?:\\"|[^"])*")|(?:'\\.')|(?:'[^\\]')|(?:[^\\][ \t]))|([^ \t]*)|(?:[ \t]*)/,$arg);
-		my @wsa = SplitElem($arg);
-		for my $elem (@wsa) {
-			if($elem =~ /^[ \t]*$/) { next; } # ignore empty elements
-			print STDERR "[ELEM'$elem']" if($verbose > 5);
-			if($elem eq "[") {
+		#my @wsa = SplitElem($arg);
+		if($elem == 3 or $elem == 12) {
+			$lss = 3;
+			next;
+		}
+		if($lss > 2) {
+			if($tkn->{tkn} != 20 and $tkn->{tkn} != 1) {
+				if($tkn->{tkn} == 21) { next; }
+			print STDERR "[ELEM'$arg']" if($verbose > 5);
+			if($elem == 16) {
 				if($arg !~ /\[.*\]/) {
 					print STDERR "$langtable{error}: $langtable{line} $.: $langtable{unmatchlb}\n";
 				} else {
 					push @lfs, "[";
 				}
-			} elsif($elem eq "]") {
+			} elsif($elem == 17) {
 				if($arg !~ /\[.*\]/) {
 					print STDERR "$langtable{error}: $langtable{line} $.: $langtable{unmatchrb}\n";
 				} else {
 					push @lfs, "]";
 				}
-			} elsif($elem eq "+") {
+			} elsif($elem == 13) {
 				push @lfs, "+";
-			} elsif($elem eq "-") {
+			} elsif($elem == 14) {
 				$minus = "-";
 				push @lfs, "+";
+			} elsif($elem == 9) {
+				my ($fnd, $scr) = TestReg($arg);
+				push @lfs, $scr->{nam};
+				push @encode, $scr->{encode};
+			} elsif($elem == 26) {
 			} else {
-				my ($type, $vec, $i, $v) = DecodeSymbol($minus . $elem, $itr, $userel);
+				my ($type, $vec, $i, $v) = DecodeSymbol($arg, $minus, $elem, $itr, $userel);
 				if($type eq "reg") {
 					push @lfs, $vec->{nam};
 					push @encode, $vec->{encode};
+				} elsif($type eq "keyw") {
+					push @lfs, $vec->{nam};
+					push @encode, $vec->{encode} if($vec->{encode} ne '');
 				} elsif($type eq "lit") {
 					push @lfs, $vec->{nam};
 					push @encode, $vec->{encode}. "+$v";
@@ -382,11 +780,15 @@ sub DecodeSymbols {
 				}
 				$minus = "";
 			}
+			} else {
+				$format = join('',@lfs);
+				push @format, ($format);
+				@lfs = ();
+			}
 		}
-		$format = join('',@lfs);
-		push @format, ($format);
 	}
 	$format = join(',',@format);
+	print STDERR "TKF: $format " if($verbose > 3);
 	return ($format,$maxitr,@encode);
 }
 
@@ -548,12 +950,17 @@ sub RunEncoder {
 
 sub Pass2 {
 	for my $l (@allfile) {
-		my ($label,$opname,$linearg,$fnum) = ($l->{label},$l->{op},$l->{arg},$l->{fnum});
+		my ($linearg,$fnum) = ($l->{line},$l->{fnum});
 		my $fname = @incltable[$fnum - 1]->{f};
-		$opname = uc $opname;
+		my ($macro,$label,$opname);
+		for my $r (@$linearg) {
+			if($r->{tkn} == 2) { $label = $r->{v}; }
+			if($r->{tkn} == 3) { $opname = uc($r->{v}); }
+			if($r->{tkn} == 12) { $macro = uc($r->{v}); }
+		}
 		$vinstrend = $l->{ilen};
-		print STDERR join("\t",($l->{lnum},sprintf("%08x",$vpc),$label,$opname,$linearg)) . "\t"  if($verbose > 1);
-		if($label ne '' && $opname ne '.EQU') {
+		print STDERR join("\t",($l->{lnum},sprintf("%08x",$vpc),$label,$opname,$linearg)) . "\t"  if($verbose > 2);
+		if($label ne '' && $macro ne '.EQU') {
 			print STDERR "SYMGEN: $label ".$symtable{$label}{type}."\n" if($verbose > 2);
 			if($symtable{$label}{type} ne "") {
 				if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
@@ -604,10 +1011,13 @@ sub Pass2 {
 			print STDERR "ITR: $itr $found $addrmode\n" if($verbose > 4);
 			} while($found != 0 && $itr < $maxitr && $addrmode == 0);
 			$itr--;
+		} elsif($macro ne '') {
+			$found = 1;
+			$addrmode = 1;
 		} else {
 			$found = -1; #no opcode on line
 			$addrmode = -1;
-			print STDERR "\n" if($verbose > 1 && $label ne '');
+			print STDERR "\n" if($verbose > 2 && $label ne '');
 		}
 		if($found == 0) {
 			print STDERR "$langtable{error}: $fname:$l->{lnum}:",
@@ -619,9 +1029,9 @@ sub Pass2 {
 				print STDERR "$langtable{error}: $fname:$l->{lnum}:",
 					" $opname - $langtable{addrunkn}\n$l->{ltxt}\n";
 				$errors++;
-			} elsif($enc eq 'M') {
-				if($opname eq '.ORG') {
-					my ($type, $vec, $i, $v) = DecodeSymbol($linearg,-1);
+			} elsif($macro ne '') {
+				if($macro eq '.ORG') {
+					my ($type, $vec, $i, $v) = ParseSymbol($linearg,-1,$arc);
 					if($type eq "val") {
 						$vpc = $v;
 					}
@@ -635,8 +1045,8 @@ sub Pass2 {
 					}
 					}
 					}
-				} elsif($opname eq '.EQU') {
-					my ($type, $vec, $i, $v) = DecodeSymbol($linearg,-1);
+				} elsif($macro eq '.EQU') {
+					my ($type, $vec, $i, $v) = ParseSymbol($linearg,-1,$arc);
 					if($type eq "val") {
 					if($label ne '') {
 					if($symtable{$label}{val} != $v) {
@@ -647,7 +1057,7 @@ sub Pass2 {
 					}
 					}
 
-				} elsif($opname =~ /^.D(AT|[BDW])$/) {
+				} elsif($macro =~ /\.D(AT|[BDW])/) {
 					if($1 eq 'W') {
 					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, $arc, 16);
 					} elsif($1 eq 'D') {
@@ -661,7 +1071,7 @@ sub Pass2 {
 					print STDERR "\n".join(' ', @words) . "\n" if($verbose > 3);
 					my ($avl, $dat, @bytes) = BinSplit(@words);
 					my $txtbyte = join(' ', @bytes);
-					print STDERR $txtbyte . "\n" if($verbose > 1);
+					print STDERR $txtbyte . "\n" if($verbose > 2);
 					# encode data
 					$l->{addr} = $vpc;
 					$vinstrend = ($avl / $cputable{CPUM});
@@ -700,12 +1110,12 @@ sub Pass2 {
 				print STDERR "AVC: $avl $lavl\n" if($verbose > 3);
 				$flagpass++;
 				my $txtbyte = join('', @lbytes);
-				print STDERR $txtbyte . "\n" if($verbose > 1);
+				print STDERR $txtbyte . "\n" if($verbose > 2);
 				$l->{byte} = $txtbyte;
 				$l->{dat} = $ldat;
 			} else {
 				my $txtbyte = join('', @bytes);
-				print STDERR $txtbyte . "\n" if($verbose > 1);
+				print STDERR $txtbyte . "\n" if($verbose > 2);
 				$l->{byte} = $txtbyte;
 				$l->{dat} = $dat;
 			}
@@ -763,13 +1173,20 @@ sub LoadInclude {
 		}
 		my ($label,$opname,@linearg);# = split(/[ \t]+/, $prl);
 		my $linearg;# = join(' ',@linearg);
-		if($prl =~ /^([^ \t]*)[ \t]+([^ \t]*)[ \t]*([^ \t]*.*)$/) { # standard line
-			($label,$opname,$linearg) = ($1,$2,$3);
-		} elsif($prl =~ /^[ \t]*([^ \t]+):[ \t]+([^ \t]*)[ \t]*([^ \t]*.*)$/) { # alt label pos
-			($label,$opname,$linearg) = ($1,$2,$3);
-		} elsif($prl =~ /^[ \t]*([^ \t]+):[ \t]*$/) { # label only
-			($label,$opname,$linearg) = ($1,'','');
-		}
+		#if($prl =~ /^([^ \t]*)[ \t]+([^ \t]*)[ \t]*([^ \t]*.*)$/) { # standard line
+		#	($label,$opname,$linearg) = ($1,$2,$3);
+		#} elsif($prl =~ /^[ \t]*([^ \t]+):[ \t]+([^ \t]*)[ \t]*([^ \t]*.*)$/) { # alt label pos
+		#	($label,$opname,$linearg) = ($1,$2,$3);
+		#} elsif($prl =~ /^[ \t]*([^ \t]+):[ \t]*$/) { # label only
+		#	($label,$opname,$linearg) = ($1,'','');
+		#}
+		@linearg = TokenizeLine($prl);
+	for my $r (@linearg) {
+		print STDERR "T$r->{tkn} $r->{v} " if($verbose > 5);
+		if($r->{tkn} == 2) { $label = $r->{v}; }
+		if($r->{tkn} == 3) { $opname = $r->{v}; }
+	}
+		print STDERR "\n" if($verbose > 5);
 		#$linearg =~ s/\+/ + /g;
 		if($label ne '') {
 			$label =~ s/:$//;
@@ -801,10 +1218,70 @@ sub LoadInclude {
 				$errors++;
 			}
 		}
-		push @allfile, {lnum => $., fnum => $fnum, ltxt => $_, label => $label, op => $opname, arg => $linearg};
-		print STDERR join("\t",($.,$label,$opname,$linearg,$enc))."\n" if($verbose > 1);
+		push @allfile, {lnum => $., fnum => $fnum, ltxt => $_, label => $label, op => $opname, line => \@linearg};
+		print STDERR join("\t",($.,$label,$opname,$enc))."\n" if($verbose > 2);
 	}
 	close ISF;
+}
+
+sub WriteListing {
+	my ($outf) = @_;
+	unless( open(OSF, ">", $outf) ) {
+		print STDERR $langtable{fileof1} . $outf . $langtable{fileof2} . "\n";
+		return;
+	}
+	foreach my $l (@allfile) {
+		my ($linearg) = ($l->{line});
+		my $lss = 0;
+		print OSF join("\t",($l->{lnum},sprintf("%08x",$l->{addr})))." ";
+		for my $r (@$linearg) {
+			if($r->{tkn} == 2) { print OSF $r->{v} . "\t"; $lss = 1;
+			} elsif($r->{tkn} == 3) {
+				print OSF " \t" if($lss == 0);
+				print OSF $r->{v} . "\t"; $lss = 2;
+			} elsif($r->{tkn} == 12) {
+				print OSF " \t" if($lss == 0);
+				print OSF $r->{v} ."\t"; $lss = 2;
+			} elsif($r->{tkn} != 21) {
+				print OSF $r->{v};
+			}
+		}
+		print OSF "\t" . $l->{byte} . "\n" ;
+	}
+	print OSF "Symbols:\n" if($verbose > 0);
+	foreach my $l (keys %symtable) {
+		printf OSF "%08x  %s\n",$symtable{$l}{val},$l
+	}
+	close OSF;
+}
+
+sub WriteFlat {
+	my ($outf) = @_;
+	unless( open(OBF, ">", $outf) ) {
+		print STDERR $langtable{fileof1} . $outf . $langtable{fileof2} . "\n";
+		return;
+	} else {
+		binmode OBF;
+	}
+	my $vpi = undef;
+	print STDERR "Writting flat binary to $outf\n" if($verbose > 0);
+	foreach my $l (@allfile) {
+		if($vpi == undef) { $vpi = $l->{addr}; }
+		if($vpi < $l->{addr}) {
+			if($vpi < $l->{addr}) {
+				my $align = $l->{addr} - $vpi;
+				for(my $i = 0; $i < $align; $i++) { print OBF "\0"; }
+				print STDERR "Wrote $align null bytes\n" if($verbose > 2);
+				$vpi += $align;
+			} else {
+				print STDERR "Address break in binary flat file ", sprintf("%08x to %08x",$vpi, $l->{addr}), "\nLine: $l->{lnum}\n" if($verbose > 0);
+				$vpi = $l->{addr};
+			}
+		}
+		print OBF $l->{dat};
+		$vpi += length($l->{dat});
+	}
+	close OBF;
 }
 
 sub Assemble {
@@ -823,29 +1300,9 @@ sub Assemble {
 	Pass2();
 	} while(($assmpass++) < 9 && $flagpass >= 1 && $errors < 1);
 	if($errors == 0) {
-		unless( open(OSF, ">", $outfile) ) {
-			print STDERR $langtable{fileof1} . $outfile . $langtable{fileof2} . "\n";
-			return;
-		}
-		unless( open(OBF, ">", $outbinfile) ) {
-			print STDERR $langtable{fileof1} . $outbinfile . $langtable{fileof2} . "\n";
-			close OSF;
-			return;
-		} else {
-			binmode OBF;
-		}
 		print STDERR "Complete!\n" if($verbose > 0);
-		foreach my $l (@allfile) {
-		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{arg});
-		print OSF join("\t",($l->{lnum},sprintf("%08x",$l->{addr}),$label,$opname,$linearg),$l->{byte}) . "\n" ;
-			print OBF $l->{dat};
-		}
-		print OSF "Symbols:\n" if($verbose > 0);
-		foreach my $l (keys %symtable) {
-			printf OSF "%08x  %s\n",$symtable{$l}{val},$l
-		}
-		close OSF;
-		close OBF;
+		WriteListing($outfile);
+		WriteFlat($outbinfile);
 	} else {
 		print STDERR "Errors in assembly.\n";
 	}
