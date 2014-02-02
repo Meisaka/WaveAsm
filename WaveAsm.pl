@@ -22,8 +22,9 @@ my $vpc = 0;
 my $vinstrend = 0;
 my $errors = 0;
 my $flagpass = 0;
-my $verbose = 2;
+my $verbose = 1;
 my $binformat = 'f';
+my $exten = '.ffi';
 my @asmqueue = ( );
 # CPU specs (these are replaced in loaded file)
 my %cputable = (ISN => "NONE", FILEW => 8, CPUW => 8, CPUM => 8, CPUE => "LE", FILEE => "LE", ALIGN => 0);
@@ -57,10 +58,13 @@ foreach(@ARGV) {
 			$verbose += length($1);
 		} elsif($flags eq 'ff') {
 			$binformat = 'f';
+			$exten = '.ffi';
 		} elsif($flags eq 'fs') {
 			$binformat = 's';
+			$exten = '.s19';
 		} elsif($flags eq 'fE') {
 			$binformat = 'E';
+			$exten = '.a';
 		}
 	} else {
 		push @asmqueue, $_;
@@ -82,7 +86,11 @@ foreach my $o (@regtable) {
 foreach(@asmqueue) {
 	@allfile = (); # clear file
 	%symtable = ();
-	Assemble( $_, ($_ . ".lst") , ($_ . ".bin"));
+	my $filen = $_;
+	if($filen =~ /(.*)(\.[aA][sS][mM]|\.s)$/) {
+		$filen = $1;
+	}
+	Assemble( $_, ($filen . ".lst") , ($filen . $exten));
 }
 
 exit;
@@ -1256,18 +1264,17 @@ sub WriteFlat {
 		binmode OBF;
 	}
 	my $vpi = undef;
-	print STDERR "Writting flat binary to $outf\n" if($verbose > 1);
+	print STDERR "Writting flat binary to $outf\n" if($verbose > 0);
 	foreach my $l (@allfile) {
 		if($vpi == undef) { $vpi = $l->{addr}; }
 		if($vpi < $l->{addr}) {
-			if($vpi + $cputable{ALIGN} >= $l->{addr}) {
-				my $align = $vpi % $cputable{ALIGN};
-				my $padsz = ($cputable{ALIGN} - $align) if($align > 0); # align words in file
-				for(my $i = 0; $i < $padsz; $i++) { print OBF "\0"; }
-				print STDERR "Wrote $padsz null bytes\n" if($verbose > 2);
-				$vpi += $padsz;
+			if($vpi < $l->{addr}) {
+				my $align = $l->{addr} - $vpi;
+				for(my $i = 0; $i < $align; $i++) { print OBF "\0"; }
+				print STDERR "Wrote $align null bytes\n" if($verbose > 2);
+				$vpi += $align;
 			} else {
-				print STDERR "Address break in binary flat file ", sprintf("%08x to %08x",$vpi, $l->{addr}), "\nLine: $l->{lnum}\n" if($verbose > 1);
+				print STDERR "Address break in binary flat file ", sprintf("%08x to %08x",$vpi, $l->{addr}), "\nLine: $l->{lnum}\n" if($verbose > 0);
 				$vpi = $l->{addr};
 			}
 		}

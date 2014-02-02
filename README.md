@@ -15,19 +15,20 @@ Running is simple, on Linux/Unix:
 
 	./WaveAsm.pl somefile.to.asm
 
-on Windows:
+on Windows (perl must be installed separately):
 
 	\Path\to\perl.exe WaveAsm.pl somefile.to.asm
 
 This will generate two files:
- - somefile.to.asm.lst - which contains the final listing.
- - somefile.to.asm.bin - a flat binary file in the endieness of the CPU target.
+ - somefile.to.lst - which contains the final listing.
+ - somefile.to.ffi - a flat binary file in the endianess of the CPU target.
 
-This will also print out quite a bit of debug info, along with any errors.
-If the debug output does not have "complete!" at the end, check for errors.
+This will also print out a bit of debug info, along with any errors, add the '-v' flag to up verbosity, use multiple times for more nonsense output.
+If the debug output does not have "complete!" at the end, check for errors, getting the arguments to an instruction wrong will print an "invalid addressing mode" error.
 
 Supported Macros
 ----
+Starting with version 0.3.0 macros and instructions are *not* case sensitive.
 WaveAsm currently supports 6 macros:
  - .ORG - setting where the code is generated for.
  - .EQU - Set the label on the line to whatever value is supplied.
@@ -37,34 +38,40 @@ WaveAsm currently supports 6 macros:
  - .DD - Similar to .DAT, except encode each value as a 32 bit Doubleword
 
 Note:
-.ORG generates code to run a at specified address, but the binary file is flat, so a relocator or specific load address will be needed.
+.ORG generates code to run a at specified address, but the default binary output format is flat, so a relocator or specific base load address will be needed.
+Changing to a different address after one is already set with .ORG will fill the flat binary file with padding.
 
-Numeric Expressions
+Expressions
 ----
-Numeric expressions are simple in the current version, they are single values and may be negative.
-The following formats are used for numeric expressions:
+Expressions are fairly simple in the current version, they are single values and may be negative.
+The following formats are used for expressions:
  - 0xnn - Hexadecimal, where nn is any number hex digits.
- - nnh - Hexadecimal, alternate form.
+ - nnh - Hexadecimal, alternate form, be careful not mix these up with labels.
  - 0bnn - Binary, nn is any number of bits.
  - 0nnn - Octal, nnn is any number of octal digits.
  - nn - Decimal, nn is any number of digits.
  - 'x' - Character, x is any single character, special escaped values are also supported \n \t \r \0 have standard meanings, use \' to embed the ' value.
+ - "xxx" - String, only use with a data macro (.DAT .DB etc.), supports same escape scheme as character values.
 
 Standard Syntax
 ----
-WaveAsm uses a common assembly syntax, each line may be blank, a comment, just a label, or full line.
-All labels must appear first on a line, before any white space.
-All instructions must come after label and whitespace, whitespace before the instruction is required.
-Arguments optionally follow the instruction, and are seperated with commas "," or depending on the instruction set, the plus sign "+".
-The exact format of arguments is instruction set specific.
-The default instruction set is [TR3200](https://github.com/trillek-team/trillek-computer/blob/master/TR3200.md).
+WaveAsm uses a flexible assembly syntax, each line may be blank, a comment, just a label, or full line.
+A label must appear first on a line, before instructions or macros, a line may contain just a label.
+A label may be declared with a colon ":" before or after it.
+Instructions come after label (if any).
+Arguments optionally follow the instruction, and are seperated with commas "," or other puctuation depending on the instruction set.
+The exact format of arguments is instruction set specific and defined in the ISF.
+The default instruction set is for the Trillek TR3200 CPU,
+you can find a definition of [the TR3200 instruction set here](https://github.com/trillek-team/trillek-computer/blob/master/TR3200.md).
+The [complete computer specs are here](https://github.com/trillek-team/trillek-computer/)
 
 Known bugs
 ----
-This is still an early version, so line expressions are limited and isf syntax is strict.
-Instruction set definitions are not syntax checked, they just define syntax, editing them could cause wierd behavior.
+This is still an in development version, so line expressions are limited and isf syntax is kind of strict.
+Instruction set definitions are not syntax checked, they just define syntax, so editing them can cause wierd behavior, if done improperly, [a description of ISF](ISF.md) is availble, but not complete nor fully implemented.
 
-Unknown Bugs
+Bugs / Feature Requests
 ----
-There maybe other bugs. If you find any, let me know!
+If you find a bug, you can let me know in a github issue, I try to stay on top of these if I find any.
+Or if want to request a feature that does not already have an issue, I am open to suggestions for improvements.
 
