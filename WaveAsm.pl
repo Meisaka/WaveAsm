@@ -22,7 +22,7 @@ my $vpc = 0;
 my $vinstrend = 0;
 my $errors = 0;
 my $flagpass = 0;
-my $verbose = 1;
+my $verbose = 2;
 my $binformat = 'f';
 my @asmqueue = ( );
 # CPU specs (these are replaced in loaded file)
@@ -505,6 +505,10 @@ sub TokenizeLine {
 					$last = 1;
 				} elsif($c =~ /[0-9]/) {
 					$state = 5;
+					$item .= $c
+				} elsif($c =~ /[0-9a-fA-Fh]/) {
+					$state = 6;
+					$item .= $c
 				} else {
 					$state = 0;
 					#add token
@@ -521,6 +525,7 @@ sub TokenizeLine {
 			} else {
 				$state = 0;
 				# add dec
+				print "TKN-ADEC " if($verbose > 5);
 				push @results, {tkn=>5, v=>$item}; $item = '';
 			}
 		} elsif($state == 6) {
@@ -575,7 +580,7 @@ sub TokenizeLine {
 					$state = 10;
 					$last = 0;
 					$item .= $c;
-				} elsif($c =~ /[0-9]/) {
+				} elsif($c eq '0') {
 					$state = 4;
 					if($c eq '0') {
 						$last = 1;
@@ -583,6 +588,10 @@ sub TokenizeLine {
 						$last = 0;
 						$item .= $c;
 					}
+				} elsif($c =~ /[1-9]/) {
+					$state = 5;
+					$last = 0;
+					$item = $c;
 				} elsif($c eq '"') {
 					$state = 1;
 					$last = 0;
@@ -652,6 +661,41 @@ sub TokenizeLine {
 	return @results;
 }
 
+sub ParseSymbol {
+	my ($allsym, $itr, $arc) = @_;
+	my $userel = 0;
+	my (undef, $mrel) = split(',',$arc);
+	if($mrel =~ /r/) {
+		$userel = 1;
+	}
+	my $lss = 0;
+	for my $tkn (@$allsym) {
+		my $arg = $tkn->{v};
+		my $elem = $tkn->{tkn};
+		my $minus = "";
+		if($tkn->{tkn} == 12) {
+			$lss = 3;
+			next;
+		}
+		if($lss > 2) {
+			if($tkn->{tkn} != 20 and $tkn->{tkn} != 1) {
+				if($tkn->{tkn} == 21) { next; }
+			if($elem == 16) {
+			} elsif($elem == 17) {
+			} elsif($elem == 13) {
+			} elsif($elem == 14) {
+				$minus = "-";
+			} elsif($elem == 9) {
+			} elsif($elem == 26) {
+			} else {
+				return DecodeSymbol($arg, $minus, $elem, $itr, $userel);
+			}
+			}
+		}
+	}
+	return ('nul',undef,0, "");
+}
+
 sub DecodeSymbols {
 	my ($allsym, $itr, $arc, $wordsz) = @_;
 	my $format;
@@ -675,7 +719,7 @@ sub DecodeSymbols {
 		my $elem = $tkn->{tkn};
 		my $minus = "";
 		#my @wsa = SplitElem($arg);
-		if($tkn->{tkn} == 3) {
+		if($elem == 3 or $elem == 12) {
 			$lss = 3;
 			next;
 		}
@@ -898,12 +942,17 @@ sub RunEncoder {
 
 sub Pass2 {
 	for my $l (@allfile) {
-		my ($label,$opname,$linearg,$fnum) = ($l->{label},$l->{op},$l->{line},$l->{fnum});
+		my ($linearg,$fnum) = ($l->{line},$l->{fnum});
 		my $fname = @incltable[$fnum - 1]->{f};
-		$opname = uc $opname;
+		my ($macro,$label,$opname);
+		for my $r (@$linearg) {
+			if($r->{tkn} == 2) { $label = $r->{v}; }
+			if($r->{tkn} == 3) { $opname = uc($r->{v}); }
+			if($r->{tkn} == 12) { $macro = uc($r->{v}); }
+		}
 		$vinstrend = $l->{ilen};
 		print STDERR join("\t",($l->{lnum},sprintf("%08x",$vpc),$label,$opname,$linearg)) . "\t"  if($verbose > 2);
-		if($label ne '' && $opname ne '.EQU') {
+		if($label ne '' && $macro ne '.EQU') {
 			print STDERR "SYMGEN: $label ".$symtable{$label}{type}."\n" if($verbose > 2);
 			if($symtable{$label}{type} ne "") {
 				if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
@@ -954,6 +1003,9 @@ sub Pass2 {
 			print STDERR "ITR: $itr $found $addrmode\n" if($verbose > 4);
 			} while($found != 0 && $itr < $maxitr && $addrmode == 0);
 			$itr--;
+		} elsif($macro ne '') {
+			$found = 1;
+			$addrmode = 1;
 		} else {
 			$found = -1; #no opcode on line
 			$addrmode = -1;
@@ -969,9 +1021,9 @@ sub Pass2 {
 				print STDERR "$langtable{error}: $fname:$l->{lnum}:",
 					" $opname - $langtable{addrunkn}\n$l->{ltxt}\n";
 				$errors++;
-			} elsif($enc eq 'M') {
-				if($opname eq '.ORG') {
-					my ($type, $vec, $i, $v) = DecodeSymbol($linearg,"",-1);
+			} elsif($macro ne '') {
+				if($macro eq '.ORG') {
+					my ($type, $vec, $i, $v) = ParseSymbol($linearg,-1,$arc);
 					if($type eq "val") {
 						$vpc = $v;
 					}
@@ -985,8 +1037,8 @@ sub Pass2 {
 					}
 					}
 					}
-				} elsif($opname eq '.EQU') {
-					my ($type, $vec, $i, $v) = DecodeSymbol($linearg,"",-1);
+				} elsif($macro eq '.EQU') {
+					my ($type, $vec, $i, $v) = ParseSymbol($linearg,-1,$arc);
 					if($type eq "val") {
 					if($label ne '') {
 					if($symtable{$label}{val} != $v) {
@@ -997,7 +1049,7 @@ sub Pass2 {
 					}
 					}
 
-				} elsif($opname =~ /^.D(AT|[BDW])$/) {
+				} elsif($macro =~ /\.D(AT|[BDW])/) {
 					if($1 eq 'W') {
 					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, $arc, 16);
 					} elsif($1 eq 'D') {
@@ -1171,8 +1223,22 @@ sub WriteListing {
 		return;
 	}
 	foreach my $l (@allfile) {
-		my ($label,$opname,$linearg) = ($l->{label},$l->{op},$l->{line});
-		print OSF join("\t",($l->{lnum},sprintf("%08x",$l->{addr}),$label,$opname,$linearg),$l->{byte}) . "\n" ;
+		my ($linearg) = ($l->{line});
+		my $lss = 0;
+		print OSF join("\t",($l->{lnum},sprintf("%08x",$l->{addr})))." ";
+		for my $r (@$linearg) {
+			if($r->{tkn} == 2) { print OSF $r->{v} . "\t"; $lss = 1;
+			} elsif($r->{tkn} == 3) {
+				print OSF " \t" if($lss == 0);
+				print OSF $r->{v} . "\t"; $lss = 2;
+			} elsif($r->{tkn} == 12) {
+				print OSF " \t" if($lss == 0);
+				print OSF $r->{v} ."\t"; $lss = 2;
+			} elsif($r->{tkn} != 21) {
+				print OSF $r->{v};
+			}
+		}
+		print OSF "\t" . $l->{byte} . "\n" ;
 	}
 	print OSF "Symbols:\n" if($verbose > 0);
 	foreach my $l (keys %symtable) {
@@ -1201,7 +1267,7 @@ sub WriteFlat {
 				print STDERR "Wrote $padsz null bytes\n" if($verbose > 2);
 				$vpi += $padsz;
 			} else {
-				print STDERR "Address break in binary flat file ", sprintf("%08x to %08x",$vpi, $l->{addr}), "\nLine: $l->{op} $l->{arg}\n" if($verbose > 1);
+				print STDERR "Address break in binary flat file ", sprintf("%08x to %08x",$vpi, $l->{addr}), "\nLine: $l->{lnum}\n" if($verbose > 1);
 				$vpi = $l->{addr};
 			}
 		}
