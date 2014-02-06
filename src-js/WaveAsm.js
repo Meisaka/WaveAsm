@@ -31,7 +31,7 @@ init : function() {
 		this.regtable = [];
 		this.littable = [];
 		this.cputable = [];
-		this.macrotable = [".DAT",".DB",".DW",".DD",".ORG"];
+		this.macrotable = [".DAT",".DB",".DW",".DD",".DQ",".ORG",".EQU",".RESB",".RESW",".RESD",".RESQ"];
 	},
 WV_EOL : new WaveA_Token(1,"EOL"),
 WV_LABEL : new WaveA_Token(2,"LABEL"),
@@ -664,6 +664,10 @@ Assemble : function(sc) {
 		var fagn = false;
 		var ltk;
 		var etk;
+		var mose;
+		var cll = "";
+		var cllp = 0;
+		var clec = 0;
 		function lname(a,c) {
 			if(c >= a.length) { c = a.length - 1; }
 			return a[c];
@@ -698,7 +702,14 @@ Assemble : function(sc) {
 			ltr = 0;
 			otr = -1;
 			mtr = 0;
+			mose = 0;
+			clec = 0;
+			cll = "";
+			cllp = 0;
 			while(ltr <= mtr) {
+			if(clec > 0) {
+				break;
+			}
 			fmt = "";
 			exps.length = 0;
 			for(x in ltk.tokens) {
@@ -709,11 +720,16 @@ Assemble : function(sc) {
 					if(otr < 0) { otr = 0; }
 					OpNext(this.optable);
 					break;
+				case this.WV_MACRO.token:
+					otr = -2;
+					break;
 				case this.WV_LABEL.token:
 					rtm = scanIdent1(ctk.value);
+					cll = ctk.value;
 					if(rtm) {
 						if(i+1 != rtm.l) {
 						cq += "--ERROR LABEL DUP ("+i+1 +","+ rtm.l+")--";
+						clec += 1;
 						nval = rtm.v;
 						}
 					} else {
@@ -722,6 +738,7 @@ Assemble : function(sc) {
 					}
 					break;
 				case this.WV_IDENT.token:
+					if(cll.length == 0 || cllp == 0) { cll = ctk.value; cllp = 1; }
 					rtm = scanIdent1(ctk.value);
 					if(rtm) {
 						nval = rtm.v;
@@ -733,6 +750,7 @@ Assemble : function(sc) {
 				case this.WV_NUMBIN.token:
 				case this.WV_NUMOCT.token:
 				case this.WV_NUMCHR.token:
+					if(otr == -1) { mose = 1; }
 					switch(ctk.token) {
 					case this.WV_NUMHEX.token:
 						nval = parseInt(ctk.value,16); break;
@@ -781,28 +799,36 @@ Assemble : function(sc) {
 					}
 					break;
 				case this.WV_REG.token:
+					if(otr == -1) { mose = 1; }
 					rtm = this.CheckReg(ctk.value);
 					fmt += rtm.name;
 					break;
 				case this.WV_PLUS.token:
+					if(otr == -1) { mose = 1; }
 					fmt += "+";
 					break;
 				case this.WV_MINUS.token:
+					if(otr == -1) { mose = 1; }
 					exps.push(ctk);
 					break;
 				case this.WV_COMMA.token:
+					if(otr == -1) { mose = 1; }
 					fmt += ",";
 					break;
 				case this.WV_INS.token:
+					if(otr == -1) { mose = 1; }
 					fmt += "[";
 					break;
 				case this.WV_INE.token:
+					if(otr == -1) { mose = 1; }
 					fmt += "]";
 					break;
 				case this.WV_PNS.token:
+					if(otr == -1) { mose = 1; }
 					fmt += "(";
 					break;
 				case this.WV_PNE.token:
+					if(otr == -1) { mose = 1; }
 					fmt += ")";
 					break;
 				}
@@ -813,6 +839,8 @@ Assemble : function(sc) {
 				etk = this.Encode(this.optable[otr].enc,[],[]);
 				cq += etk.pfx + etk.bin + " " + etk.suf;
 				break;
+			} else if(otr == -2) {
+				cq += "-M N/I-";
 			} else {
 				if(ltr == mtr) {
 					otr++;
@@ -822,14 +850,18 @@ Assemble : function(sc) {
 						continue;
 					} else {
 						cq += "--OP ERROR--";
+						clec += 1;
 						break;
 					}
 				}
 			}
+			} else if(mose == 1) {
+				cq += '--ERROR NO SUCH OP "'+cll+'"--'
+				clec += 1;
 			}
 			ltr++;
 			}
-			linetable.push({n:i+1, t:ltk.tokens, a:vpc, l:vps, x:cq});
+			linetable.push({n:i+1, t:ltk.tokens, ec:clec, a:vpc, l:vps, x:cq});
 			vpc += vps;
 		}
 		//
@@ -844,6 +876,10 @@ Assemble : function(sc) {
 			ltr = 0;
 			otr = -1;
 			mtr = 0;
+			clec = 0;
+			if(linetable[i].ec > 0) {
+				continue;
+			}
 ventest:	while(ltr <= mtr) {
 			fmt = "";
 			exps.length = 0;
@@ -868,11 +904,12 @@ ventest:	while(ltr <= mtr) {
 					if(rtm) {
 						nval = rtm.v;
 					} else {
-						if(ctk.value.search(/^[0-9A-Fa-f]\+h$/)) {
+						if(ctk.value.search(/^[0-9A-Fa-f]\+h$/) > -1) {
 							cq += "-AHC-";
 							nval = parseInt(ctk.value.substr(0,ctk.value.length-1),16);
 						} else {
 							cq += "--ERROR NO IDENT--";
+							clec += 1;
 							mtr = 0;
 							break ventest;
 						}
@@ -979,6 +1016,7 @@ ventest:	while(ltr <= mtr) {
 						continue;
 					} else {
 						cq += "--OP ERROR--"+ fmt;
+						clec += 1;
 						break;
 					}
 				}
@@ -1002,7 +1040,11 @@ ventest:	while(ltr <= mtr) {
 		//
 		cq = "";
 		for(i in linetable) {
-			cq += "<div>" + linetable[i].x + "</div>";
+			cq += "<div";
+			if(linetable[i].x.search(/ERR/) > -1) {
+				cq += " class=\"ERR\"";
+			}
+			cq += ">" + linetable[i].x + "</div>";
 		}
 		return {html:cp, bhtml:cq };
 	}
