@@ -105,7 +105,11 @@ TODO
     LitDef := LitVal(lower) ["," LitVal(upper)] [":" Encoding [":" Encoding ...] ]
 
 GROUP Section
-Groups define a single name to a number of different argument formats, and their encodings
+----
+Groups define a single name to a number of different argument formats, and their encodings.
+Encoding for a group behaves the same as an Opcode (using a back reference).
+Paramformat is simialar to an Opcode, but only allows one param.
+Groupnames are intended to be used a few times, "grouping" things together under the same name.
 
 Format overview:
 

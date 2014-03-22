@@ -16,6 +16,7 @@ my @regtable = ( {reg => '*', nam => 'intern'} );
 my @littable = ( );
 my @incltable = ( );
 my @keywtable = ( );
+my @grptable = ( );
 my %symtable;
 my @allfile;
 my $vpc = 0;
@@ -177,6 +178,18 @@ sub LoadInstructions {
 				push @littable, ({rl => $rl, ru => $ru, nam => $att{nam}, encode => join(':',@encode)});
 				print STDERR "LIT: $att{nam} $range $att{len} " . join(':',@encode) . "\n" if($verbose > 4);
 
+			}
+		} elsif(/<GROUP>/ .. /<\/GROUP>/) {
+			if(/^\W*#/ or /</) {
+			} elsif(/^\W*$/) {
+			} else {
+				my @gsec = split(':', $_);
+				my $gname = ($gsec[0]);
+				$gname =~ s/"//g;
+				my $fcode = $gsec[1];
+				$fcode =~ s/"([^"]+)"/\1/;
+				push @grptable, {group => $gname, arf => $fcode, encode => $gsec[2]};
+				print STDERR "GROUP: $gname $fcode\n" if($verbose > 4);
 			}
 		} elsif(/<OPCODE>/ .. /<\/OPCODE>/) {
 			if(/^\W*#/ or /</) {
