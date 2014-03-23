@@ -10,7 +10,8 @@ my %langtable = ( fileof1 => "Failed to open file: ", fileof2 => "",
 	addrunkn => "Invalid addressing mode.",
 	unmatchlb => "found '[', expected ']' not found",
 	unmatchrb => "']' without previous '['",
-	duplabel => "Duplicate label on line"
+	duplabel => "Duplicate label on line",
+	nolabel => "No such label"
 );
 my @regtable = ( {reg => '*', nam => 'intern'} );
 my @littable = ( );
@@ -41,7 +42,7 @@ my @macrotable = (
 	{op => '.DD', arc => -1, arf => '*', encode => 'M'}
 );
 
-print STDERR "Wave Asm - version 0.3.0\n";
+print STDERR "Wave Asm - version 0.3.1\n";
 foreach(@ARGV) {
 	if(/^--(.*)/) {
 		my $flags = $1;
@@ -292,6 +293,10 @@ sub DecodeSymbol {
 				}
 			}
 		}
+	}
+	if($tknum == 4) {
+		print STDERR "$langtable{error}: $langtable{line} $.: \"$sym\" $langtable{nolabel}\n";
+		return ("null", undef);
 	}
 
 	($vt, $v) = DecodeValue($sym, $tknum, $minus);
@@ -773,6 +778,8 @@ sub DecodeSymbols {
 					push @encode, "+ALM$ewordsz+$v";
 				} elsif($type eq "str") {
 					push @encode, "+ASLM$ewordsz$v";
+				} elsif($type eq "null") {
+					return ("!NULL",0, undef);
 				} else {
 					push @lfs, "*";
 					push @encode, "+$v";
@@ -1000,6 +1007,11 @@ sub Pass2 {
 					$found++;
 					my $tmxr;
 			($format, $tmxr, @encode) = DecodeSymbols($linearg, $itr, $arc);
+					if($format eq '!NULL') {
+						$addrmode = -1;
+						$found = -2;
+						last;
+					}
 					$maxitr = $tmxr if($tmxr > $maxitr);
 					if($i->{arf} eq $format) {
 						$addrmode = 1;
@@ -1022,6 +1034,8 @@ sub Pass2 {
 		if($found == 0) {
 			print STDERR "$langtable{error}: $fname:$l->{lnum}:",
 			" $opname - $langtable{opunkn}\n$l->{ltxt}\n";
+			$errors++;
+		} elsif($found < 0) {
 			$errors++;
 		} else {
 			print STDERR "INT: $found$addrmode $format\n" if($verbose > 4);
