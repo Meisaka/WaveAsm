@@ -1035,8 +1035,9 @@ sub Pass2 {
 			print STDERR "$langtable{error}: $fname:$l->{lnum}:",
 			" $opname - $langtable{opunkn}\n$l->{ltxt}\n";
 			$errors++;
-		} elsif($found < 0) {
+		} elsif($found == -2) {
 			$errors++;
+			print STDERR "$langtable{error}: $fname:$l->{lnum}\n";
 		} else {
 			print STDERR "INT: $found$addrmode $format\n" if($verbose > 4);
 			if($addrmode == 0) {
