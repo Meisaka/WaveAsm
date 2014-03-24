@@ -295,8 +295,7 @@ sub DecodeSymbol {
 		}
 	}
 	if($tknum == 4) {
-		print STDERR "$langtable{error}: $langtable{line} $.: \"$sym\" $langtable{nolabel}\n";
-		return ("null", undef);
+		return ("err", "\"$sym\" $langtable{nolabel}");
 	}
 
 	($vt, $v) = DecodeValue($sym, $tknum, $minus);
@@ -778,8 +777,8 @@ sub DecodeSymbols {
 					push @encode, "+ALM$ewordsz+$v";
 				} elsif($type eq "str") {
 					push @encode, "+ASLM$ewordsz$v";
-				} elsif($type eq "null") {
-					return ("!NULL",0, undef);
+				} elsif($type eq "err") {
+					return ("!NULL",0, $vec);
 				} else {
 					push @lfs, "*";
 					push @encode, "+$v";
@@ -1037,7 +1036,7 @@ sub Pass2 {
 			$errors++;
 		} elsif($found == -2) {
 			$errors++;
-			print STDERR "$langtable{error}: $fname:$l->{lnum}\n";
+			print STDERR "$langtable{error}: $fname:$l->{lnum}: $encode[0]\n";
 		} else {
 			print STDERR "INT: $found$addrmode $format\n" if($verbose > 4);
 			if($addrmode == 0) {
