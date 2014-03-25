@@ -11,7 +11,8 @@ my %langtable = ( fileof1 => "Failed to open file: ", fileof2 => "",
 	unmatchlb => "found '[', expected ']' not found",
 	unmatchrb => "']' without previous '['",
 	duplabel => "Duplicate label on line",
-	nolabel => "No such label"
+	nolabel => "No such label",
+	synerr => "Syntax error"
 );
 my @regtable = ( {reg => '*', nam => 'intern'} );
 my @littable = ( );
@@ -247,9 +248,17 @@ sub DecodeValue {
 		$v = oct("0b$sym");
 		$v = -$v if(length($nvc) % 2 == 1);
 		return ("val",$v);
-	} elsif($tkval == 4) { # Hexadecimal ...h
-		$v = oct("0x$sym");
-		$v = -$v if(length($nvc) % 2 == 1);
+	} elsif($tkval == 4) { # Labels / Hexadecimal ...h
+		my $r = $symtable{$sym};
+		if($r->{val} ne '') {
+			# label
+		} elsif($sym =~ /^([0-9a-fA-F]+)h$/ {
+			$v = oct("0x$1");
+			$v = -$v if(length($nvc) % 2 == 1);
+		} else {
+			# label not found or not hex const
+			return ("err", "\"$sym\" $langtable{nolabel}");
+		}
 		return ("val",$v);
 	} elsif($tkval == 7) { # octal 0... just in case ;)
 		$v = oct($sym);
@@ -965,6 +974,118 @@ sub RunEncoder {
 		unshift @output,$output if($output ne '');
 	}
 	return @output;
+}
+
+sub FullParse {
+	for my $l (@allfile) {
+		my ($linearg,$fnum) = ($l->{line},$l->{fnum});
+		my $fname = @incltable[$fnum - 1]->{f};
+		my ($macro,$label,$opname) = ('','','');
+		my $lss = 0;
+		$vinstrend = $l->{ilen};
+		my $format;
+		my @format = ();
+		my $maxitr = 0;
+		my @encode = ();
+		my @lfs = ();
+
+		for my $r (@$linearg) {
+			my $arg = $tkn->{v};
+			my $elem = $tkn->{tkn};
+			if($elem == 2) {
+				if($lss > 0) {
+				print STDERR "$langtable{error}: $fname:$l->{lnum}: $langtable{synerr}\n";
+				$errors++;
+				} else {
+					$label = $arg;
+					if($symtable{$label}{type} ne "") {
+						if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
+							$symtable{$label}{val} = $vpc;
+							$l->{addr} = $vpc;
+							print STDERR "SYMSET: $label $symtable{$label}{val}\n" if($verbose > 3);
+							$flagpass++;
+						}
+					}
+					$lss = 1;
+				}
+			} elsif($elem == 3) {
+				if($lss > 1) {
+				print STDERR "$langtable{error}: $fname:$l->{lnum}: $langtable{synerr}\n";
+					$errors++;
+				} else {
+					$opname = uc($arg);
+					$lss = 2;
+				}
+			} elsif($elem == 12) {
+				if($lss > 1) {
+				print STDERR "$langtable{error}: $fname:$l->{lnum}: $langtable{synerr}\n";
+					$errors++;
+				} else {
+					$macro = uc($arg);
+					$lss = 2;
+				}
+			} else {
+				if($lss > 2) {
+					if($elem != 20 and $elem != 1) {
+						if($elem == 21) { next; }
+					print STDERR "[ELEM'$arg']" if($verbose > 5);
+					if($elem == 16) {
+						#	if($arg !~ /\[.*\]/) {
+						#	print STDERR "$langtable{error}: $langtable{line} $.: $langtable{unmatchlb}\n";
+						#} else {
+							push @lfs, "[";
+						#}
+					} elsif($elem == 17) {
+						#if($arg !~ /\[.*\]/) {
+						#	print STDERR "$langtable{error}: $langtable{line} $.: $langtable{unmatchrb}\n";
+						#} else {
+							push @lfs, "]";
+							#}
+					} elsif($elem == 13) {
+						push @lfs, "+";
+					} elsif($elem == 14) {
+						#$minus = "-";
+						push @lfs, "+";
+					} elsif($elem == 9) {
+						my ($fnd, $scr) = TestReg($arg);
+						push @lfs, $scr->{nam};
+						push @encode, $scr->{encode};
+					} elsif($elem == 26) {
+					} else {
+						my ($type, $vec, $i, $v) = DecodeSymbol($arg, $minus, $elem, $itr, $userel);
+						if($type eq "reg") {
+							push @lfs, $vec->{nam};
+							push @encode, $vec->{encode};
+						} elsif($type eq "keyw") {
+							push @lfs, $vec->{nam};
+							push @encode, $vec->{encode} if($vec->{encode} ne '');
+						} elsif($type eq "lit") {
+							push @lfs, $vec->{nam};
+							push @encode, $vec->{encode}. "+$v";
+							$maxitr = $i;
+						} elsif($type eq "val") {
+							push @encode, "+ALM$ewordsz+$v";
+						} elsif($type eq "str") {
+							push @encode, "+ASLM$ewordsz$v";
+						} elsif($type eq "err") {
+						print STDERR "$langtable{error}: $fname:$l->{lnum}: $vec\n";
+							$errors++;
+						} else {
+							push @lfs, "*";
+							push @encode, "+$v";
+							#$maxitr = $i;
+						}
+						#$minus = "";
+					}
+					} else {
+						$format = join('',@lfs);
+						push @format, ($format);
+						@lfs = ();
+					}
+				}
+			}
+		}
+	}
 }
 
 sub Pass2 {
