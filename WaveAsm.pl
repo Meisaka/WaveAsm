@@ -252,6 +252,7 @@ sub DecodeValue {
 		my $r = $symtable{$sym};
 		if($r->{val} ne '') {
 			# label
+			return ("val",$r->{val});
 		} elsif($sym =~ /^([0-9a-fA-F]+)h$/) {
 			$v = oct("0x$1");
 			$v = -$v if(length($nvc) % 2 == 1);
@@ -988,6 +989,10 @@ sub FullParse {
 		my $maxitr = 0;
 		my @encode = ();
 		my @lfs = ();
+		my @lvs = ();
+		my $curval = 0;
+		my $curtype = '';
+		my $curop = '';
 
 		for my $r (@$linearg) {
 			my $arg = $r->{v};
@@ -1030,52 +1035,84 @@ sub FullParse {
 						if($elem == 21) { next; }
 					print STDERR "[ELEM'$arg']" if($verbose > 5);
 					if($elem == 16) {
-						#	if($arg !~ /\[.*\]/) {
-						#} else {
-							push @lfs, "[";
-						#}
+						$curtype = '';
+						if($curop ne '') { push @lfs, $curop; $curop = ''; }
+						push @lfs, "[";
 					} elsif($elem == 17) {
-						#if($arg !~ /\[.*\]/) {
-						#} else {
-							push @lfs, "]";
-						#}
+						$curtype = '';
+						if($curop ne '') { push @lfs, $curop; $curop = ''; }
+						push @lfs, "]";
 					} elsif($elem == 13) {
 						# plus
+						if($curop ne '') { push @lfs, $curop; $curop = ''; }
+						$curop = '+';
 						push @lfs, "+";
 					} elsif($elem == 14) {
 						#$minus = "-";
+						$curop = '-';
+						if($curop ne '') { push @lfs, $curop; $curop = ''; }
 						push @lfs, "+";
 					} elsif($elem == 9) {
 						# reg
+						if($curop ne '') { push @lfs, $curop; $curop = ''; }
+						$curtype = 'R';
 						my ($fnd, $scr) = TestReg($arg);
 						push @lfs, $scr->{nam};
 						push @encode, $scr->{encode};
 					} elsif($elem == 26) {
 						# keyword
+						if($curop ne '') { push @lfs, $curop; $curop = ''; }
+						$curtype = 'K';
 						my ($fnd, $scr) = TestKeyW($arg);
 						push @lfs, $scr->{nam};
 						push @encode, $scr->{encode};
 					} else {
-						my ($type, $v) = DecodeValue($arg, $elem, 0);
+						my ($type, $v) = DecodeValue($arg, $elem, '');
 						if($type eq "val") {
-							push @lfs, "VAL";
-							push @encode, "+$v";
+							print STDERR "VALTYPE: $v\n";
+							if($curtype eq 'V') {
+								if($curop eq '+') {
+									$curval += $v;
+									$curop = '';
+								} elsif($curop eq '-') {
+									$curval -= $v;
+									$curop = '';
+								} else {
+									push @lvs, $v;
+								}
+							} else {
+								push @lfs, $curop if($curop ne '');
+								$curop = '';
+								$curval = $v;
+							}
+							$curtype = 'V';
 						} elsif($type eq "str") {
+							$curtype = 'S';
+							push @lfs, $curop if($curop ne '');
 							push @lfs, "STR";
 							push @encode, "+ASLM$v";
 						} elsif($type eq "err") {
+							$curtype = '';
 						print STDERR "$langtable{error}: $fname:$l->{lnum}: $v\n";
 							$errors++;
 						} else {
+							$curtype = '';
 							push @lfs, "*";
 							push @encode, "+$v";
 						}
 					}
 					} else {
+						if($curtype eq 'V') {
+							if($curop ne '') { push @lfs, $curop; $curop = ''; }
+							push @lvs, $curval;
+						}
 						$format = join('',@lfs);
 						print STDERR "FMT: $format\n" if($verbose > 4);
 						push @format, ($format);
 						@lfs = ();
+						$curtype = '';
+						$curval = 0;
+						$curop = '';
 						#print STDERR "$langtable{error}: $langtable{line} $.:",
 						#" $langtable{unmatchlb}\n";
 						#print STDERR "$langtable{error}: $langtable{line} $.:",
@@ -1091,9 +1128,10 @@ sub FullParse {
 		} elsif($macro ne '') {
 			$format = join(',',@format);
 			if($macro eq '.ORG') {
-				my ($type, $vec, $i, $v) = ParseSymbol($linearg,-1,1);
-				if($type eq "val") {
-					$vpc = $v;
+				#my ($type, $vec, $i, $v) = ParseSymbol($linearg,-1,1);
+				if(@lvs > 0) {
+					#if($type eq "val") {
+					$vpc = $lvs[0];
 				}
 				# rerun line labels
 				if($label ne '') {
@@ -1106,8 +1144,9 @@ sub FullParse {
 					}
 				}
 			} elsif($macro eq '.EQU') {
-				my ($type, $vec, $i, $v) = ParseSymbol($linearg,-1,1);
-				if($type eq "val") {
+				#my ($type, $vec, $i, $v) = ParseSymbol($linearg,-1,1);
+				if(@lvs > 0) {
+					my $v = $lvs[0];
 					if($label ne '') {
 						if($symtable{$label}{val} != $v) {
 							print STDERR "RRSYM: $symtable{$label}{val} $v\n" if($verbose > 2);
