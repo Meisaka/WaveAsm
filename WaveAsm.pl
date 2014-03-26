@@ -252,7 +252,7 @@ sub DecodeValue {
 		my $r = $symtable{$sym};
 		if($r->{val} ne '') {
 			# label
-		} elsif($sym =~ /^([0-9a-fA-F]+)h$/ {
+		} elsif($sym =~ /^([0-9a-fA-F]+)h$/) {
 			$v = oct("0x$1");
 			$v = -$v if(length($nvc) % 2 == 1);
 		} else {
@@ -990,8 +990,8 @@ sub FullParse {
 		my @lfs = ();
 
 		for my $r (@$linearg) {
-			my $arg = $tkn->{v};
-			my $elem = $tkn->{tkn};
+			my $arg = $r->{v};
+			my $elem = $r->{tkn};
 			if($elem == 2) {
 				if($lss > 0) {
 				print STDERR "$langtable{error}: $fname:$l->{lnum}: $langtable{synerr}\n";
@@ -1025,66 +1025,127 @@ sub FullParse {
 					$lss = 2;
 				}
 			} else {
-				if($lss > 2) {
+				if($lss > 1) {
 					if($elem != 20 and $elem != 1) {
 						if($elem == 21) { next; }
 					print STDERR "[ELEM'$arg']" if($verbose > 5);
 					if($elem == 16) {
 						#	if($arg !~ /\[.*\]/) {
-						#	print STDERR "$langtable{error}: $langtable{line} $.: $langtable{unmatchlb}\n";
 						#} else {
 							push @lfs, "[";
 						#}
 					} elsif($elem == 17) {
 						#if($arg !~ /\[.*\]/) {
-						#	print STDERR "$langtable{error}: $langtable{line} $.: $langtable{unmatchrb}\n";
 						#} else {
 							push @lfs, "]";
-							#}
+						#}
 					} elsif($elem == 13) {
+						# plus
 						push @lfs, "+";
 					} elsif($elem == 14) {
 						#$minus = "-";
 						push @lfs, "+";
 					} elsif($elem == 9) {
+						# reg
 						my ($fnd, $scr) = TestReg($arg);
 						push @lfs, $scr->{nam};
 						push @encode, $scr->{encode};
 					} elsif($elem == 26) {
+						# keyword
+						my ($fnd, $scr) = TestKeyW($arg);
+						push @lfs, $scr->{nam};
+						push @encode, $scr->{encode};
 					} else {
-						my ($type, $vec, $i, $v) = DecodeSymbol($arg, $minus, $elem, $itr, $userel);
-						if($type eq "reg") {
-							push @lfs, $vec->{nam};
-							push @encode, $vec->{encode};
-						} elsif($type eq "keyw") {
-							push @lfs, $vec->{nam};
-							push @encode, $vec->{encode} if($vec->{encode} ne '');
-						} elsif($type eq "lit") {
-							push @lfs, $vec->{nam};
-							push @encode, $vec->{encode}. "+$v";
-							$maxitr = $i;
-						} elsif($type eq "val") {
-							push @encode, "+ALM$ewordsz+$v";
+						my ($type, $v) = DecodeValue($arg, $elem, 0);
+						if($type eq "val") {
+							push @lfs, "VAL";
+							push @encode, "+$v";
 						} elsif($type eq "str") {
-							push @encode, "+ASLM$ewordsz$v";
+							push @lfs, "STR";
+							push @encode, "+ASLM$v";
 						} elsif($type eq "err") {
-						print STDERR "$langtable{error}: $fname:$l->{lnum}: $vec\n";
+						print STDERR "$langtable{error}: $fname:$l->{lnum}: $v\n";
 							$errors++;
 						} else {
 							push @lfs, "*";
 							push @encode, "+$v";
-							#$maxitr = $i;
 						}
-						#$minus = "";
 					}
 					} else {
 						$format = join('',@lfs);
+						print STDERR "FMT: $format\n" if($verbose > 4);
 						push @format, ($format);
 						@lfs = ();
+						#print STDERR "$langtable{error}: $langtable{line} $.:",
+						#" $langtable{unmatchlb}\n";
+						#print STDERR "$langtable{error}: $langtable{line} $.:",
+						#" $langtable{unmatchrb}\n";
 					}
 				}
 			}
 		}
+		# process line
+		if($opname ne '') {
+			$format = join(',',@format);
+			print STDERR "OPC: $opname - PARAM: $format\n" if($verbose > 4);
+		} elsif($macro ne '') {
+			$format = join(',',@format);
+			if($macro eq '.ORG') {
+				my ($type, $vec, $i, $v) = ParseSymbol($linearg,-1,1);
+				if($type eq "val") {
+					$vpc = $v;
+				}
+				# rerun line labels
+				if($label ne '') {
+					if($symtable{$label}{type} ne "") {
+						if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
+							$symtable{$label}{val} = $vpc;
+							print STDERR "RRSYM: $vpc\n" if($verbose > 3);
+							$flagpass++;
+						}
+					}
+				}
+			} elsif($macro eq '.EQU') {
+				my ($type, $vec, $i, $v) = ParseSymbol($linearg,-1,1);
+				if($type eq "val") {
+					if($label ne '') {
+						if($symtable{$label}{val} != $v) {
+							print STDERR "RRSYM: $symtable{$label}{val} $v\n" if($verbose > 2);
+							$symtable{$label}{val} = $v;
+							$flagpass++;
+						}
+					}
+				}
+
+			} elsif($macro =~ /\.D(AT|[BDW])/) {
+				my @lencode;
+				my $lformat;
+				if($1 eq 'W') {
+					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, -1, 16);
+				} elsif($1 eq 'D') {
+					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, -1, 32);
+				} else {
+					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, -1);
+				}
+				print STDERR "\n".join(' ', @lencode)  if($verbose > 3);
+				my @words;
+				@words = RunEncoder(join(' ', @lencode));
+				print STDERR "\n".join(' ', @words) . "\n" if($verbose > 3);
+				my ($avl, $dat, @bytes) = BinSplit(@words);
+				my $txtbyte = join(' ', @bytes);
+				print STDERR $txtbyte . "\n" if($verbose > 2);
+				# encode data
+				$l->{addr} = $vpc;
+				$vinstrend = ($avl / $cputable{CPUM});
+				$vpc += $vinstrend;
+				$flagpass++ if($l->{ilen} != $vinstrend);
+				$l->{ilen} = $vinstrend + 0;
+				$l->{byte} = $txtbyte;
+				$l->{dat} = $dat;
+				#$addrmode = -1;
+			}
+		}
+		# end process line
 	}
 }
 
@@ -1441,11 +1502,12 @@ sub Assemble {
 	LoadInclude($file, "", 0, 0);
 	$assmpass = 2;
 	do {
-	$vpc = 0;
-	$errors = 0;
-	$flagpass = 0;
-	print STDERR "Pass $assmpass\n" if($verbose > 0);
-	Pass2();
+		$vpc = 0;
+		$errors = 0;
+		$flagpass = 0;
+		print STDERR "Pass $assmpass\n" if($verbose > 0);
+		#Pass2();
+		FullParse();
 	} while(($assmpass++) < 9 && $flagpass >= 1 && $errors < 1);
 	if($errors == 0) {
 		print STDERR "Complete!\n" if($verbose > 0);
