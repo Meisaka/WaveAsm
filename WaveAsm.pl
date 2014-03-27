@@ -986,6 +986,7 @@ sub FullParse {
 		$vinstrend = $l->{ilen};
 		my $format;
 		my @format = ();
+		my @values = ();
 		my $maxitr = 0;
 		my @encode = ();
 		my @lfs = ();
@@ -1003,14 +1004,6 @@ sub FullParse {
 				$errors++;
 				} else {
 					$label = $arg;
-					if($symtable{$label}{type} ne "") {
-						if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
-							$symtable{$label}{val} = $vpc;
-							$l->{addr} = $vpc;
-							print STDERR "SYMSET: $label $symtable{$label}{val}\n" if($verbose > 3);
-							$flagpass++;
-						}
-					}
 					$lss = 1;
 				}
 			} elsif($elem == 3) {
@@ -1046,12 +1039,12 @@ sub FullParse {
 						# plus
 						if($curop ne '') { push @lfs, $curop; $curop = ''; }
 						$curop = '+';
-						push @lfs, "+";
+						#push @lfs, "+";
 					} elsif($elem == 14) {
 						#$minus = "-";
-						$curop = '-';
 						if($curop ne '') { push @lfs, $curop; $curop = ''; }
-						push @lfs, "+";
+						$curop = '-';
+						#push @lfs, "+";
 					} elsif($elem == 9) {
 						# reg
 						if($curop ne '') { push @lfs, $curop; $curop = ''; }
@@ -1081,9 +1074,14 @@ sub FullParse {
 									push @lvs, $v;
 								}
 							} else {
-								push @lfs, $curop if($curop ne '');
-								$curop = '';
-								$curval = $v;
+								if($curop eq '-' and $curtype eq '') {
+									$curop = '';
+									$curval = -$v;
+								} else {
+									push @lfs, $curop if($curop ne '');
+									$curop = '';
+									$curval = $v;
+								}
 							}
 							$curtype = 'V';
 						} elsif($type eq "str") {
@@ -1108,8 +1106,10 @@ sub FullParse {
 						}
 						$format = join('',@lfs);
 						print STDERR "FMT: $format\n" if($verbose > 4);
+						push @values, @lvs;
 						push @format, ($format);
 						@lfs = ();
+						@lvs = ();
 						$curtype = '';
 						$curval = 0;
 						$curop = '';
@@ -1125,37 +1125,72 @@ sub FullParse {
 		if($opname ne '') {
 			$format = join(',',@format);
 			print STDERR "OPC: $opname - PARAM: $format\n" if($verbose > 4);
+
+			my @words;
+			#@words = RunEncoder($enc, @encode);
+			my ($avl, $dat, @bytes) = BinSplit(@words);
+			$l->{addr} = $vpc;
+			$vinstrend = ($avl / $cputable{CPUM});
+			$vpc += $vinstrend;
+			$l->{ilen} = $vinstrend;
+			# Reencode for relative jumps
+			#($lformat, undef, @lencode) = DecodeSymbols($linearg, $itr, $arc);
+			### Debug block
+			#if($verbose > 3) {
+			#	$encode = join('||',@encode);
+			#	print STDERR "\n$format \"$encode\" $enc";
+			#	$encode = join('||',@lencode);
+			#	print STDERR "\n$lformat \"$encode\" $enc\n";
+			#}
+			###
+			#@words = RunEncoder($enc, @lencode);
+			my ($lavl, $ldat, @lbytes) = BinSplit(@words);
+			if($lavl != $avl) {
+				print STDERR "AVC: $avl $lavl\n" if($verbose > 3);
+				$flagpass++;
+				my $txtbyte = join('', @lbytes);
+				print STDERR $txtbyte . "\n" if($verbose > 2);
+				$l->{byte} = $txtbyte;
+				$l->{dat} = $ldat;
+			} else {
+				my $txtbyte = join('', @bytes);
+				print STDERR $txtbyte . "\n" if($verbose > 2);
+				$l->{byte} = $txtbyte;
+				$l->{dat} = $dat;
+			}
 		} elsif($macro ne '') {
 			$format = join(',',@format);
 			if($macro eq '.ORG') {
 				#my ($type, $vec, $i, $v) = ParseSymbol($linearg,-1,1);
-				if(@lvs > 0) {
+				if(@values > 0) {
 					#if($type eq "val") {
-					$vpc = $lvs[0];
+					$vpc = 0 + $values[0];
+					$l->{addr} = $vpc;
 				}
 				# rerun line labels
 				if($label ne '') {
 					if($symtable{$label}{type} ne "") {
 						if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
 							$symtable{$label}{val} = $vpc;
-							print STDERR "RRSYM: $vpc\n" if($verbose > 3);
+							print STDERR "RRSYM: $label = $vpc\n" if($verbose > 3);
 							$flagpass++;
 						}
 					}
 				}
 			} elsif($macro eq '.EQU') {
 				#my ($type, $vec, $i, $v) = ParseSymbol($linearg,-1,1);
-				if(@lvs > 0) {
-					my $v = $lvs[0];
+				if(@values > 0) {
+					my $v = $values[0];
 					if($label ne '') {
 						if($symtable{$label}{val} != $v) {
-							print STDERR "RRSYM: $symtable{$label}{val} $v\n" if($verbose > 2);
+							print STDERR "RRSYM: $label ( $symtable{$label}{val} ) = $v\n" if($verbose > 2);
 							$symtable{$label}{val} = $v;
+							$l->{addr} = $vpc;
+							print STDERR "RRSYM: $label ( $symtable{$label}{val} )\n" if($verbose > 2);
 							$flagpass++;
 						}
 					}
 				}
-
 			} elsif($macro =~ /\.D(AT|[BDW])/) {
 				my @lencode;
 				my $lformat;
@@ -1182,6 +1217,17 @@ sub FullParse {
 				$l->{byte} = $txtbyte;
 				$l->{dat} = $dat;
 				#$addrmode = -1;
+			}
+		}
+		# process line labels
+		if($label ne "" and ($macro ne '.EQU')) {
+			if($symtable{$label}{type} ne "") {
+				if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
+					$symtable{$label}{val} = $vpc;
+					$l->{addr} = $vpc;
+					print STDERR "SYMSET: $label $symtable{$label}{val}\n" if($verbose > 3);
+					$flagpass++;
+				}
 			}
 		}
 		# end process line
