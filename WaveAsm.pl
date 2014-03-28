@@ -1026,79 +1026,79 @@ sub FullParse {
 				if($lss > 1) {
 					if($elem != 20 and $elem != 1) {
 						if($elem == 21) { next; }
-					print STDERR "[ELEM'$arg']" if($verbose > 5);
-					if($elem == 16) {
-						$curtype = '';
-						if($curop ne '') { push @lfs, $curop; $curop = ''; }
-						push @lfs, "[";
-					} elsif($elem == 17) {
-						$curtype = '';
-						if($curop ne '') { push @lfs, $curop; $curop = ''; }
-						push @lfs, "]";
-					} elsif($elem == 13) {
-						# plus
-						if($curop ne '') { push @lfs, $curop; $curop = ''; }
-						$curop = '+';
-						#push @lfs, "+";
-					} elsif($elem == 14) {
-						#$minus = "-";
-						if($curop ne '') { push @lfs, $curop; $curop = ''; }
-						$curop = '-';
-						#push @lfs, "+";
-					} elsif($elem == 9) {
-						# reg
-						if($curop ne '') { push @lfs, $curop; $curop = ''; }
-						$curtype = 'R';
-						my ($fnd, $scr) = TestReg($arg);
-						push @lfs, $scr->{nam};
-						push @encode, $scr->{encode};
-					} elsif($elem == 26) {
-						# keyword
-						if($curop ne '') { push @lfs, $curop; $curop = ''; }
-						$curtype = 'K';
-						my ($fnd, $scr) = TestKeyW($arg);
-						push @lfs, $scr->{nam};
-						push @encode, $scr->{encode};
-					} else {
-						my ($type, $v) = DecodeValue($arg, $elem, '');
-						if($type eq "val") {
-							print STDERR "VALTYPE: $v\n";
-							if($curtype eq 'V') {
-								if($curop eq '+') {
-									$curval += $v;
-									$curop = '';
-								} elsif($curop eq '-') {
-									$curval -= $v;
-									$curop = '';
-								} else {
-									push @lvs, $v;
-								}
-							} else {
-								if($curop eq '-' and $curtype eq '') {
-									$curop = '';
-									$curval = -$v;
-								} else {
-									push @lfs, $curop if($curop ne '');
-									$curop = '';
-									$curval = $v;
-								}
-							}
-							$curtype = 'V';
-						} elsif($type eq "str") {
-							$curtype = 'S';
-							push @lfs, $curop if($curop ne '');
-							push @lfs, "STR";
-							push @encode, "+ASLM$v";
-						} elsif($type eq "err") {
+						print STDERR "[ELEM'$arg']" if($verbose > 5);
+						if($elem == 16) {
 							$curtype = '';
-						print STDERR "$langtable{error}: $fname:$l->{lnum}: $v\n";
-							$errors++;
+							if($curop ne '') { push @lfs, $curop; $curop = ''; }
+							push @lfs, "[";
+						} elsif($elem == 17) {
+							$curtype = '';
+							if($curop ne '') { push @lfs, $curop; $curop = ''; }
+							push @lfs, "]";
+						} elsif($elem == 13) {
+							# plus
+							if($curop ne '') { push @lfs, $curop; $curop = ''; }
+							$curop = '+';
+							#push @lfs, "+";
+						} elsif($elem == 14) {
+							#$minus = "-";
+							if($curop ne '') { push @lfs, $curop; $curop = ''; }
+							$curop = '-';
+							#push @lfs, "+";
+						} elsif($elem == 9) {
+							# reg
+							if($curop ne '') { push @lfs, $curop; $curop = ''; }
+							$curtype = 'R';
+							my ($fnd, $scr) = TestReg($arg);
+							push @lfs, $scr->{nam};
+							push @encode, $scr->{encode};
+						} elsif($elem == 26) {
+							# keyword
+							if($curop ne '') { push @lfs, $curop; $curop = ''; }
+							$curtype = 'K';
+							my ($fnd, $scr) = TestKeyW($arg);
+							push @lfs, $scr->{nam};
+							push @encode, $scr->{encode};
 						} else {
-							$curtype = '';
-							push @lfs, "*";
-							push @encode, "+$v";
+							my ($type, $v) = DecodeValue($arg, $elem, '');
+							if($type eq "val") {
+								print STDERR "VALTYPE: $v\n";
+								if($curtype eq 'V') {
+									if($curop eq '+') {
+										$curval += $v;
+										$curop = '';
+									} elsif($curop eq '-') {
+										$curval -= $v;
+										$curop = '';
+									} else {
+										push @lvs, $v;
+									}
+								} else {
+									if($curop eq '-' and $curtype eq '') {
+										$curop = '';
+										$curval = -$v;
+									} else {
+										push @lfs, $curop if($curop ne '');
+										$curop = '';
+										$curval = $v;
+									}
+								}
+								$curtype = 'V';
+							} elsif($type eq "str") {
+								$curtype = 'S';
+								push @lfs, $curop if($curop ne '');
+								push @lfs, "STR";
+								push @encode, "+ASLM$v";
+							} elsif($type eq "err") {
+								$curtype = '';
+							print STDERR "$langtable{error}: $fname:$l->{lnum}: $v\n";
+								$errors++;
+							} else {
+								$curtype = '';
+								push @lfs, "*";
+								push @encode, "+$v";
+							}
 						}
-					}
 					} else {
 						if($curtype eq 'V') {
 							if($curop ne '') { push @lfs, $curop; $curop = ''; }
@@ -1118,6 +1118,10 @@ sub FullParse {
 						#print STDERR "$langtable{error}: $langtable{line} $.:",
 						#" $langtable{unmatchrb}\n";
 					}
+				} else {
+					if($elem == 21) { next; }
+					print STDERR "$langtable{error}: $fname:$l->{lnum}: $arg ($elem) $langtable{synerr}\n";
+					$errors++;
 				}
 			}
 		}
