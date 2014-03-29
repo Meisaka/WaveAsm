@@ -1011,6 +1011,7 @@ sub FullParse {
 		my ($linearg,$fnum) = ($l->{line},$l->{fnum});
 		my $fname = @incltable[$fnum - 1]->{f};
 		my ($macro,$label,$opname) = ('','','');
+		my $labelca = $vpc;
 		my $lss = 0;
 		$vinstrend = $l->{ilen};
 		my $format;
@@ -1130,7 +1131,7 @@ sub FullParse {
 							} elsif($type eq "str") {
 								$curtype = 'S';
 								push @lfs, $curop if($curop ne '');
-								push @lfs, {type=>'S',encode=>"+ASLM$v"};
+								push @lvs, {type=>'S',encode=>"+ASLM$v"};
 							} elsif($type eq "err") {
 								$curtype = '';
 							print STDERR "$langtable{error}: $fname:$l->{lnum}: $v\n";
@@ -1322,6 +1323,7 @@ sub FullParse {
 					#if($type eq "val") {
 					$vpc = 0 + $values[0];
 					$l->{addr} = $vpc;
+					$labelca = $vpc;
 				}
 				# rerun line labels
 				if($label ne '') {
@@ -1341,6 +1343,7 @@ sub FullParse {
 						if($symtable{$label}{val} != $v) {
 							print STDERR "RRSYM: $label ( $symtable{$label}{val} ) = $v\n" if($verbose > 2);
 							$symtable{$label}{val} = $v;
+
 							$l->{addr} = $vpc;
 							print STDERR "RRSYM: $label ( $symtable{$label}{val} )\n" if($verbose > 2);
 							$flagpass++;
@@ -1349,13 +1352,35 @@ sub FullParse {
 				}
 			} elsif($macro =~ /\.D(AT|[BDW])/) {
 				my @lencode;
-				my $lformat;
 				if($1 eq 'W') {
-					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, -1, 16);
+					for my $x (@values) {
+						if(ref($x) eq 'HASH') {
+							my $sv = $x->{encode};
+							$sv =~ s/^+ASLM+/+ASLM16+/;
+							push @lencode, $sv;
+						} else {
+							push @lencode, "+ALM16+$x";
+						}
+					}
 				} elsif($1 eq 'D') {
-					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, -1, 32);
+					for my $x (@values) {
+						if(ref($x) eq 'HASH') {
+							my $sv = $x->{encode};
+							$sv =~ s/^+ASLM+/+ASLM32+/;
+							push @lencode, $sv;
+						} else {
+							push @lencode, "+ALM32+$x";
+						}
+					}
 				} else {
-					($lformat, undef, @lencode) = DecodeSymbols($linearg, -1, -1);
+					for my $x (@values) {
+						if(ref($x) eq 'HASH') {
+							my $sv = $x->{encode};
+							push @lencode, $sv;
+						} else {
+							push @lencode, "+ALM+$x";
+						}
+					}
 				}
 				print STDERR "\n".join(' ', @lencode)  if($verbose > 3);
 				my @words;
@@ -1378,9 +1403,9 @@ sub FullParse {
 		# process line labels
 		if($label ne "" and ($macro ne '.EQU')) {
 			if($symtable{$label}{type} ne "") {
-				if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
-					$symtable{$label}{val} = $vpc;
-					$l->{addr} = $vpc;
+				if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $labelca) {
+					$symtable{$label}{val} = $labelca;
+					$l->{addr} = $labelca;
 					print STDERR "SYMSET: $label $symtable{$label}{val}\n" if($verbose > 3);
 					$flagpass++;
 				}
