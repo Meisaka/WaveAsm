@@ -1221,6 +1221,7 @@ sub FullParse {
 					}
 				} else {
 					if($elem == 21) { next; }
+					if($elem == 1) { next; }
 					print STDERR "$langtable{error}: $fname:$l->{lnum}: $arg ($elem) $langtable{synerr}\n";
 					$errors++;
 				}
