@@ -226,7 +226,7 @@ sub DecodeValue {
 		}
 		$v = ord($v);
 		return ("val",$v);
-	} elsif($tkval == 11) { # String literal (TODO)
+	} elsif($tkval == 11) { # String literal
 		$v = $sym;
 		$v =~ s/\\r/\r/g;
 		$v =~ s/\\n/\n/g;
@@ -346,6 +346,23 @@ sub DecodeSymbol {
 		}
 	}
 	return ("null",undef);
+}
+
+sub ParseValue {
+	my ($v, $rel) = @_;
+
+	my $ivf = [];
+	$v -= ($vpc + $vinstrend) if($rel == 1);
+	for my $r (@littable) {
+		if($r->{rl} eq '*') {
+			print STDERR "LLA: $v [ $r->{rl} $r->{ru} ]\n" if($verbose > 5);
+			push @$ivf, {type=>'V',nam => $r->{nam}, encode => $r->{encode}, val => $v};
+		} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
+			print STDERR "LLR: $v [ $r->{rl} $r->{ru} ]\n" if($verbose > 5);
+			push @$ivf, {type=>'V',nam => $r->{nam}, encode => $r->{encode}, val => $v};
+		}
+	}
+	return $ivf;
 }
 
 sub SplitElem {
@@ -687,7 +704,7 @@ sub TokenizeLine {
 					} elsif($c eq '@') {
 					} elsif($c eq '~') {
 					} else {
-						# what?
+						# nani?
 					}
 				}
 			}
@@ -1025,7 +1042,7 @@ sub FullParse {
 			} else {
 				if($lss > 1) {
 					if($elem != 20 and $elem != 1) {
-						if($elem == 21) { next; }
+						#if($elem == 21) { next; }
 						print STDERR "[ELEM'$arg']" if($verbose > 5);
 						if($elem == 16) {
 							$curtype = '';
@@ -1050,16 +1067,17 @@ sub FullParse {
 							if($curop ne '') { push @lfs, $curop; $curop = ''; }
 							$curtype = 'R';
 							my ($fnd, $scr) = TestReg($arg);
-							push @lfs, $scr->{nam};
-							push @encode, $scr->{encode};
+							push @lfs, {type=>'R',nam=>$scr->{nam},encode=>$scr->{encode}};
 						} elsif($elem == 26) {
 							# keyword
 							if($curop ne '') { push @lfs, $curop; $curop = ''; }
 							$curtype = 'K';
 							my ($fnd, $scr) = TestKeyW($arg);
-							push @lfs, $scr->{nam};
-							push @encode, $scr->{encode};
+							push @lfs, {type=>'K',nam=>$scr->{nam},encode=>$scr->{encode}};
+						} elsif($elem == 21) {
+							#ignore this
 						} else {
+							print STDERR "UKT: $elem\n";
 							my ($type, $v) = DecodeValue($arg, $elem, '');
 							if($type eq "val") {
 								print STDERR "VALTYPE: $v\n";
@@ -1072,6 +1090,7 @@ sub FullParse {
 										$curop = '';
 									} else {
 										push @lvs, $v;
+										push @lfs, ParseValue($v, 0);
 									}
 								} else {
 									if($curop eq '-' and $curtype eq '') {
@@ -1087,16 +1106,14 @@ sub FullParse {
 							} elsif($type eq "str") {
 								$curtype = 'S';
 								push @lfs, $curop if($curop ne '');
-								push @lfs, "STR";
-								push @encode, "+ASLM$v";
+								push @lfs, {type=>'S',encode=>"+ASLM$v"};
 							} elsif($type eq "err") {
 								$curtype = '';
 							print STDERR "$langtable{error}: $fname:$l->{lnum}: $v\n";
 								$errors++;
 							} else {
 								$curtype = '';
-								push @lfs, "*";
-								push @encode, "+$v";
+								push @lfs, {type=>"*",encode=>"+$v"};
 							}
 						}
 					} else {
@@ -1104,10 +1121,20 @@ sub FullParse {
 							if($curop ne '') { push @lfs, $curop; $curop = ''; }
 							push @lvs, $curval;
 						}
-						$format = join('',@lfs);
+						$format = '';
+						for my $x (@lfs) {
+							if(ref($x) eq 'HASH') {
+								print STDERR "HASH: ". $x->{type};
+								$format .= $x->{type};
+							} else {
+								print STDERR "VAL: ". $x;
+								$format .= $x;
+							}
+						}
 						print STDERR "FMT: $format\n" if($verbose > 4);
 						push @values, @lvs;
-						push @format, ($format);
+						push @format, $format;
+						if($elem == 21) { push @format, ','; }
 						@lfs = ();
 						@lvs = ();
 						$curtype = '';
