@@ -359,13 +359,13 @@ sub ParseValue {
 		if($r->{rl} eq '*') {
 			if($cname ne $r->{nam}) {
 				print STDERR "LLA: $v [ $r->{rl} $r->{ru} ]\n" if($verbose > 5);
-				push @$ivf, {type=>'V',nam => $r->{nam}, encode => $r->{encode}, val => $v};
+				push @$ivf, {type=>'V',nam => $r->{nam}, encode => $r->{encode}."+$v", val => $v};
 				$cname = $r->{nam};
 			}
 		} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
 			if($cname ne $r->{nam}) {
 				print STDERR "LLR: $v [ $r->{rl} $r->{ru} ]\n" if($verbose > 5);
-				push @$ivf, {type=>'V',nam => $r->{nam}, encode => $r->{encode}, val => $v};
+				push @$ivf, {type=>'V',nam => $r->{nam}, encode => $r->{encode}."+$v", val => $v};
 				$cname = $r->{nam};
 			}
 		}
@@ -1017,6 +1017,7 @@ sub FullParse {
 		my @format = ();
 		my @values = ();
 		my $maxitr = 1;
+		my $encode;
 		my @encode = ();
 		my @lfs = ();
 		my @lvs = ();
@@ -1054,8 +1055,9 @@ sub FullParse {
 			} else {
 				if($lss > 1) {
 					if($elem != 20 and $elem != 1) {
-						#if($elem == 21) { next; }
-						print STDERR "[ELEM'$arg']" if($verbose > 5);
+						if($elem != 21) {
+							print STDERR "[ELEM'$arg']" if($verbose > 5);
+						}
 						if($elem == 16) {
 							if($curtype eq 'V') {
 								if($curop ne '') { push @lfs, $curop; $curop = ''; }
@@ -1099,10 +1101,10 @@ sub FullParse {
 						} elsif($elem == 21) {
 							#ignore this
 						} else {
-							print STDERR "UKT: $elem\n";
+							print STDERR "UKT: $elem\n" if($verbose > 5);
 							my ($type, $v) = DecodeValue($arg, $elem, '');
 							if($type eq "val") {
-								print STDERR "VALTYPE: $v\n";
+								print STDERR "VALTYPE: $v\n" if($verbose > 5);
 								if($curtype eq 'V') {
 									if($curop eq '+') {
 										$curval += $v;
@@ -1145,42 +1147,67 @@ sub FullParse {
 							push @lfs, ParseValue($curval, 0);
 						}
 						$format = [''];
+						$encode = [[]];
 						for my $x (@lfs) {
 							if(ref($x) eq 'HASH') {
-								print STDERR "HASH: ". $x->{type} ."\n";
+								if($verbose > 5) {
+									print STDERR "HASH: ". $x->{type} ."\n";
+									print STDERR "ENCD: ". $x->{encode}."\n";
+								}
 								if($x->{type} ne 'S') {
 									for(my $xe=0; $xe<@$format; $xe++) {
 										$$format[$xe] .= $x->{nam};
 									}
+									for(my $xe=0; $xe<@$encode; $xe++) {
+										push @{$$encode[$xe]}, $x->{encode};
+									}
 								}
 							} elsif(ref($x) eq 'ARRAY') {
-								print STDERR "ARRY: ". (@$x + 0) ."\n";
+								print STDERR "ARRY: ". (@$x + 0) ."\n" if($verbose > 5);
 								my $insvarcnt;
 								$insvarcnt = @$format;
 								for(my $cax=1;$cax<@$x;$cax++) {
-									print STDERR "ARRI: ". $$x[$cax]->{nam} ."\n";
+									if($verbose > 5) {
+										print STDERR "ARRI: ". $$x[$cax]->{nam} ."\n";
+										print STDERR "ENCD: ". $$x[$cax]->{encode}."\n";
+									}
 									for(my $xe=0;$xe<$insvarcnt;$xe++) {
 										push @$format, $$format[$xe].$$x[$cax]->{nam};
+									}
+									for(my $xe=0;$xe<$insvarcnt;$xe++) {
+										push @$encode, [@{$$encode[$xe]},$$x[$cax]->{encode}];
 									}
 								}
 								for(my $xe=0;$xe<$insvarcnt;$xe++) {
 									$$format[$xe].=$$x[0]->{nam};
+									push @{$$encode[$xe]}, $$x[0]->{encode};
+									if($verbose > 5) {
+										print STDERR "ARRI: ". $$x[0]->{nam} ."\n";
+										print STDERR "ENCD: ". $$x[0]->{encode}."\n";
+									}
 								}
 							} else {
-								print STDERR "VAL: ". $x ."\n";
+								print STDERR "VAL: ". $x ."\n" if($verbose > 5);
 								for(my $xe=0; $xe<@$format; $xe++) {
 									$$format[$xe] .= $x;
 								}
 							}
 						}
-						for my $xe (@$format) {
-						print STDERR "FMT: " . $xe ."\n" if($verbose > 4);
+						if($verbose > 4) {
+							for( my $xe = 0; $xe < @$format; $xe++) {
+								print STDERR "FMT: " . $$format[$xe] ."\nENC: ";
+								for my $xxe (@{$$encode[$xe]}) {
+									print STDERR "{".$xxe."}";
+								}
+								print STDERR "\n";
+							}
 						}
 						if(@$format > $maxitr) {
 							$maxitr = @$format;
 						}
 						push @values, @lvs;
 						push @format, $format;
+						push @encode, $encode;
 						push @format, ',' if($elem == 20);
 						@lfs = ();
 						@lvs = ();
@@ -1204,38 +1231,54 @@ sub FullParse {
 #			$format = join(',',@format);
 			print STDERR "OPC: $opname\n" if($verbose > 4);
 			$format = [ ('') x $maxitr ];
+			$encode = [ ];
+			for( my $x = 0; $x < $maxitr; $x++ ) { push @$encode, []; }
 			for my $x (@format) {
 				if(ref($x) eq 'ARRAY') {
 					for(my $xe=0; $xe < $maxitr; $xe++) {
 						$$format[$xe] .= $$x[$xe % @$x];
-						print STDERR "P: ". $$x[$xe % @$x] . "\t";
+						print STDERR "P: ". $$x[$xe % @$x] . "\t" if($verbose > 5);
 					}
 				} else {
-					print STDERR "PARAM: ". $x;
+					print STDERR "PARAM: ". $x if($verbose > 5);
 					for(my $xe=0; $xe < $maxitr; $xe++) {
 						$$format[$xe] .= $x;
 					}
 				}
-				print STDERR "\n";
+				print STDERR "\n" if($verbose > 5);
 			}
-			for(my $xe=0; $xe < $maxitr; $xe++) {
-				print STDERR "SCNFMT: ". $$format[$xe] . "\n";
+			for my $x (@encode) {
+				for(my $xe=0; $xe < $maxitr; $xe++) {
+					push @{$encode->[$xe]}, join(' ',@{$$x[$xe % @$x]});
+					print STDERR "EP: ". join('--',@{$$x[$xe % @$x]}) . "\t" if($verbose > 5);
+				}
+			}
+			if($verbose > 4) {
+				for(my $xe=0; $xe < $maxitr; $xe++) {
+					print STDERR "SCNFMT: ". $$format[$xe] . "\n";
+					print STDERR "SCNENC: ". join(' ', @{$$encode[$xe]})."\n";
+				}
 			}
 
 			my $enc = undef;
+			my $encsel = 0;
 			foreach my $i ( @optable ) {
 				# TODO: Use Hashes here!!!
 				if(($i->{op}) eq ($opname)) {
 					for(my $xe=0; $xe < $maxitr; $xe++) {
 						if($i->{arf} eq $$format[$xe]) {
 							$enc = $i->{encode};
+							$encsel = $xe;
+							print STDERR "MATCH ON $xe\n" if($verbose > 5);
+							last;
 							# TODO also build and fetch param encodings!
 						}
 					}
+					last if($enc != undef);
 				}
 			}
 			my @words;
-			@words = RunEncoder($enc, @encode);
+			@words = RunEncoder($enc, @{$$encode[$encsel]});
 			my ($avl, $dat, @bytes) = BinSplit(@words);
 			$l->{addr} = $vpc;
 			$vinstrend = ($avl / $cputable{CPUM});
