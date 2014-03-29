@@ -12,7 +12,8 @@ my %langtable = ( fileof1 => "Failed to open file: ", fileof2 => "",
 	unmatchrb => "']' without previous '['",
 	duplabel => "Duplicate label on line",
 	nolabel => "No such label",
-	synerr => "Syntax error"
+	synerr => "Syntax error",
+	badlabel => "Invalid label"
 );
 my @regtable = ( {reg => '*', nam => 'intern'} );
 my @littable = ( );
@@ -460,7 +461,7 @@ sub TestKeyw {
 }
 
 sub TokenizeLine {
-	my ($line, $pstype) = @_;
+	my ($line, $file, $pstype) = @_;
 	my @chars = split('',$line);
 	my @results = ();
 	my $item;
@@ -510,6 +511,10 @@ sub TokenizeLine {
 				# add token
 				if($last == 1) {
 					#label
+					if($item eq '') {
+						print STDERR "$langtable{error}: $file:$.: $langtable{badlabel}\n";
+						$errors++;
+					}
 					push @results, {tkn=>2, v=>$item}; $item = '';
 				} else {
 					if((@test = TestOp($item))[0] == 1) {
@@ -1581,7 +1586,7 @@ sub LoadInclude {
 		#} elsif($prl =~ /^[ \t]*([^ \t]+):[ \t]*$/) { # label only
 		#	($label,$opname,$linearg) = ($1,'','');
 		#}
-		@linearg = TokenizeLine($prl);
+		@linearg = TokenizeLine($prl,$file);
 	for my $r (@linearg) {
 		print STDERR "T$r->{tkn} $r->{v} " if($verbose > 5);
 		if($r->{tkn} == 2) { $label = $r->{v}; }
@@ -1692,6 +1697,10 @@ sub Assemble {
 	$errors = 0;
 	print STDERR "Pass 1\n" if($verbose > 0);
 	LoadInclude($file, "", 0, 0);
+	if($errors > 0) {
+		print STDERR "Errors in assembly.\n";
+		return;
+	}
 	$assmpass = 2;
 	do {
 		$vpc = 0;
