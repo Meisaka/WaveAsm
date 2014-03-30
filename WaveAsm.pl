@@ -1063,7 +1063,7 @@ sub FullParse {
 							if($curtype eq 'V') {
 								if($curop ne '') { push @lfs, $curop; $curop = ''; }
 								push @lvs, $curval;
-								push @lfs, ParseValue($curval, 0);
+								push @lfs, ParseValue($curval, $l->{reladdr});
 							}
 							$curtype = '';
 							if($curop ne '') { push @lfs, $curop; $curop = ''; }
@@ -1072,7 +1072,7 @@ sub FullParse {
 							if($curtype eq 'V') {
 								if($curop ne '') { push @lfs, $curop; $curop = ''; }
 								push @lvs, $curval;
-								push @lfs, ParseValue($curval, 0);
+								push @lfs, ParseValue($curval, $l->{reladdr});
 							}
 							$curtype = '';
 							if($curop ne '') { push @lfs, $curop; $curop = ''; }
@@ -1115,7 +1115,7 @@ sub FullParse {
 										$curop = '';
 									} else {
 										push @lvs, $v;
-										push @lfs, ParseValue($v, 0);
+										push @lfs, ParseValue($v, $l->{reladdr});
 									}
 								} else {
 									if($curop eq '-' and $curtype eq '') {
@@ -1145,7 +1145,7 @@ sub FullParse {
 						if($curtype eq 'V') {
 							if($curop ne '') { push @lfs, $curop; $curop = ''; }
 							push @lvs, $curval;
-							push @lfs, ParseValue($curval, 0);
+							push @lfs, ParseValue($curval, $l->{reladdr});
 						}
 						$format = [''];
 						$encode = [[]];
@@ -1263,6 +1263,7 @@ sub FullParse {
 			}
 
 			my $enc = undef;
+			my $arc = undef;
 			my $encsel = 0;
 			foreach my $i ( @optable ) {
 				# TODO: Use Hashes here!!!
@@ -1270,16 +1271,22 @@ sub FullParse {
 					for(my $xe=0; $xe < $maxitr; $xe++) {
 						if($i->{arf} eq $$format[$xe]) {
 							$enc = $i->{encode};
+							$arc = $i->{arc};
 							$encsel = $xe;
 							print STDERR "MATCH ON $xe\n" if($verbose > 5);
 							last;
-							# TODO also build and fetch param encodings!
 						}
 					}
 					last if($enc != undef);
 				}
 			}
 			my @words;
+			if($arc != undef) {
+				if($arc =~ /r/) {
+					if($l->{reladdr} != 1) { $flagpass++; }
+					$l->{reladdr} = 1;
+				}
+			}
 			@words = RunEncoder($enc, @{$$encode[$encsel]});
 			my ($avl, $dat, @bytes) = BinSplit(@words);
 			$l->{addr} = $vpc;
