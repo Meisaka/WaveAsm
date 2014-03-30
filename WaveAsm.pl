@@ -45,7 +45,7 @@ my @macrotable = (
 	{op => '.DD', arc => -1, arf => '*', encode => 'M'}
 );
 
-print STDERR "Wave Asm - version 0.3.1\n";
+print STDERR "Wave Asm - version 0.4.2\n";
 foreach(@ARGV) {
 	if(/^--(.*)/) {
 		my $flags = $1;
@@ -191,7 +191,7 @@ sub LoadInstructions {
 				$gname =~ s/"//g;
 				my $fcode = $gsec[1];
 				$fcode =~ s/"([^"]+)"/\1/;
-				push @grptable, {group => $gname, arf => $fcode, encode => $gsec[2]};
+				push @grptable, {nam => $gname, arf => $fcode, encode => $gsec[2]};
 				print STDERR "GROUP: $gname $fcode\n" if($verbose > 4);
 			}
 		} elsif(/<OPCODE>/ .. /<\/OPCODE>/) {
@@ -1012,6 +1012,7 @@ sub FullParse {
 		my $fname = @incltable[$fnum - 1]->{f};
 		my ($macro,$label,$opname) = ('','','');
 		my $labelca = $vpc;
+		my $labelcv = $vpc;
 		my $lss = 0;
 		$vinstrend = $l->{ilen};
 		my $format;
@@ -1147,7 +1148,7 @@ sub FullParse {
 							push @lvs, $curval;
 							push @lfs, ParseValue($curval, $l->{reladdr});
 						}
-						$format = [''];
+						$format = [{f=>'',e=>[]}];
 						$encode = [[]];
 						for my $x (@lfs) {
 							if(ref($x) eq 'HASH') {
@@ -1157,11 +1158,12 @@ sub FullParse {
 								}
 								if($x->{type} ne 'S') {
 									for(my $xe=0; $xe<@$format; $xe++) {
-										$$format[$xe] .= $x->{nam};
+										$$format[$xe]->{f} .= $x->{nam};
+										push @{$$format[$xe]->{e}}, $x->{encode};
 									}
-									for(my $xe=0; $xe<@$encode; $xe++) {
-										push @{$$encode[$xe]}, $x->{encode};
-									}
+#									for(my $xe=0; $xe<@$encode; $xe++) {
+#										push @{$$encode[$xe]}, $x->{encode};
+#									}
 								}
 							} elsif(ref($x) eq 'ARRAY') {
 								print STDERR "ARRY: ". (@$x + 0) ."\n" if($verbose > 5);
@@ -1173,15 +1175,21 @@ sub FullParse {
 										print STDERR "ENCD: ". $$x[$cax]->{encode}."\n";
 									}
 									for(my $xe=0;$xe<$insvarcnt;$xe++) {
-										push @$format, $$format[$xe].$$x[$cax]->{nam};
+										push @$format, {
+											f=>$$format[$xe]->{f}.$$x[$cax]->{nam},
+											e=>[@{$$format[$xe]->{e}},$$x[$cax]->{encode}]
+										};
 									}
-									for(my $xe=0;$xe<$insvarcnt;$xe++) {
-										push @$encode, [@{$$encode[$xe]},$$x[$cax]->{encode}];
-									}
+#									for(my $xe=0;$xe<$insvarcnt;$xe++) {
+#										push @$encode, [@{$$encode[$xe]},$$x[$cax]->{encode}];
+#									}
 								}
 								for(my $xe=0;$xe<$insvarcnt;$xe++) {
-									$$format[$xe].=$$x[0]->{nam};
-									push @{$$encode[$xe]}, $$x[0]->{encode};
+									#$$format[$xe].=$$x[0]->{nam};
+									#push @{$$encode[$xe]}, $$x[0]->{encode};
+
+									$$format[$xe]->{f}.=$$x[0]->{nam};
+									push @{$$format[$xe]->{e}}, $$x[0]->{encode};
 									if($verbose > 5) {
 										print STDERR "ARRI: ". $$x[0]->{nam} ."\n";
 										print STDERR "ENCD: ". $$x[0]->{encode}."\n";
@@ -1190,14 +1198,45 @@ sub FullParse {
 							} else {
 								print STDERR "VAL: ". $x ."\n" if($verbose > 5);
 								for(my $xe=0; $xe<@$format; $xe++) {
-									$$format[$xe] .= $x;
+									$$format[$xe]->{f} .= $x;
 								}
 							}
 						}
-						if($verbose > 4) {
+						my $svarcnt;
+						$svarcnt = @$format;
+						for( my $xe = 0; $xe < $svarcnt; $xe++) {
+							for my $gq (@grptable) {
+								if($gq->{arf} eq $$format[$xe]->{f}) {
+									if($verbose > 5) {
+										print STDERR "GRP-MATCH: \"". $gq->{arf}."\" ". $gq->{nam}. " ". $gq->{encode} ."\n";
+									}
+									my $cess = $gq->{encode};
+									my @suf;
+									while($cess =~ /\\([0-9]+)/) {
+#										my $cenn = $$encode[$xe][$1 - 1];
+										my $cenn = $$format[$xe]->{e}[$1 - 1];
+										my ($cee, @cee) = split(':', $cenn);
+										$cess =~ s/\\([0-9]+)/$cee/;
+										push @suf, @cee;
+									}
+									$cess.=":".join('+', @suf);
+									my $insvarcnt;
+									$insvarcnt = @$format;
+#									push @$format, $gq->{nam};
+#									push @$encode, [$cess];
+									push @$format, {
+										f=>$gq->{nam},
+										e=>[$cess]
+									};
+									print STDERR "GRP-ENKOD: ".$cess."\n" if($verbose >5);
+								}
+							}
+						}
+						if($verbose > 7) {
 							for( my $xe = 0; $xe < @$format; $xe++) {
-								print STDERR "FMT: " . $$format[$xe] ."\nENC: ";
-								for my $xxe (@{$$encode[$xe]}) {
+								print STDERR "FMT: " . $$format[$xe]->{f} ."\nENC: ";
+#								for my $xxe (@{$$encode[$xe]}) {
+								for my $xxe (@{$$format[$xe]->{e}}) {
 									print STDERR "{".$xxe."}";
 								}
 								print STDERR "\n";
@@ -1208,7 +1247,7 @@ sub FullParse {
 						}
 						push @values, @lvs;
 						push @format, $format;
-						push @encode, $encode;
+#						push @encode, $encode;
 						push @format, ',' if($elem == 20);
 						@lfs = ();
 						@lvs = ();
@@ -1230,55 +1269,102 @@ sub FullParse {
 		}
 		# process line
 		if($opname ne '') {
-#			$format = join(',',@format);
 			print STDERR "OPC: $opname\n" if($verbose > 4);
-			$format = [ ('') x $maxitr ];
+			$format = [ ];
 			$encode = [ ];
-			for( my $x = 0; $x < $maxitr; $x++ ) { push @$encode, []; }
-			for my $x (@format) {
-				if(ref($x) eq 'ARRAY') {
-					for(my $xe=0; $xe < $maxitr; $xe++) {
-						$$format[$xe] .= $$x[$xe % @$x];
-						print STDERR "P: ". $$x[$xe % @$x] . "\t" if($verbose > 5);
-					}
-				} else {
-					print STDERR "PARAM: ". $x if($verbose > 5);
-					for(my $xe=0; $xe < $maxitr; $xe++) {
-						$$format[$xe] .= $x;
-					}
+			for( my $x = 0; $x < $maxitr; $x++ ) {
+				for(my $y = 0; $y < $maxitr; $y++) {
+#					push @$format, '';
+					push @$format, {f=>'', e=>[], w=>-1};
+#					push @$encode, [];
 				}
-				print STDERR "\n" if($verbose > 5);
 			}
-			for my $x (@encode) {
-				for(my $xe=0; $xe < $maxitr; $xe++) {
-					push @{$encode->[$xe]}, join(' ',@{$$x[$xe % @$x]});
-					print STDERR "EP: ". join('--',@{$$x[$xe % @$x]}) . "\t" if($verbose > 5);
+			for(my $xc=0; $xc < $maxitr; $xc++) {
+				my $xr = 0;
+				for(my $q=0;$q<@format;$q++) {
+#				for my $x (@format) {
+					my $x = $format[$q];
+
+#					my $y = $encode[$q % @encode];
+#					if(@encode > 0) {
+#						for(my $xe=0; $xe < $maxitr; $xe++) {
+#						}
+#					}
+
+					if(ref($x) eq 'HASH') {
+					} elsif(ref($x) eq 'ARRAY') {
+						for(my $xe=0; $xe < $maxitr; $xe++) {
+#							$$format[$xc*$maxitr+$xe] .= $$x[($xe+$xr*$xc) % @$x];
+#							push @{$encode->[$xc*$maxitr+$xe]}, join(' ',@{$$y[($xe+$xr*$xc) % @$y]});
+#					print STDERR "EP: ".@$x.$$x[($xe+$xr*$xc) % @$x]."="
+#					.@$y. join('--',@{$$y[($xe+$xr*$xc) % @$y]}) . "\t" if($verbose > 5);
+
+							$$format[$xc*$maxitr+$xe]->{w} = $xe + $xc;
+							$$format[$xc*$maxitr+$xe]->{f} .= $$x[($xe+$xr*$xc) % @$x]->{f};
+							push @{$$format[$xc*$maxitr+$xe]->{e}}, join(' ',@{$$x[($xe+$xr*$xc) % @$x]->{e}});
+		print STDERR "EP: $xe $xr $xc ".$$x[($xe+$xr*$xc) % @$x]->{f}."="
+		. join('--',@{$$x[($xe+$xr*$xc) % @$x]->{e}}) . "\t" if($verbose > 5);
+						}
+					} else {
+						$xr++;
+						print STDERR "$xc PARAM: ". $x if($verbose > 5);
+						for(my $xe=0; $xe < $maxitr; $xe++) {
+							$$format[$xc*$maxitr+$xe]->{f} .= $x;
+						}
+					}
+					print STDERR "\n" if($verbose > 5);
 				}
+#				for my $y (@encode) {
+#				for(my $q=0;$q<@encode;$q++) {
+#					my $y = $encode[$q];
+#					for(my $xe=0; $xe < $maxitr; $xe++) {
+#						push @{$encode->[$xc*$maxitr+$xe]}, join(' ',@{$$y[($xe+$xr*$xc) % @$y]});
+#				print STDERR "EP: ". join('--',@{$$y[$xe % @$y]}) . "\t" if($verbose > 5);
+#					}
+#				}
 			}
 			if($verbose > 4) {
-				for(my $xe=0; $xe < $maxitr; $xe++) {
-					print STDERR "SCNFMT: ". $$format[$xe] . "\n";
-					print STDERR "SCNENC: ". join(' ', @{$$encode[$xe]})."\n";
+				for(my $xe=0; $xe < @$format; $xe++) {
+#					print STDERR "SCNFMT: ". $$format[$xe] . "\n";
+#					print STDERR "SCNENC: ". join(' ', @{$$encode[$xe]})."\n";
+					print STDERR "SCNFMT: ". $$format[$xe]->{f} . "\n";
+					print STDERR "SCNENC: ". join(' ', @{$$format[$xe]->{e}})."\n";
 				}
 			}
 
 			my $enc = undef;
 			my $arc = undef;
-			my $encsel = 0;
+			my $encsel = -1;
+			my $selw = -1;
 			foreach my $i ( @optable ) {
 				# TODO: Use Hashes here!!!
 				if(($i->{op}) eq ($opname)) {
-					for(my $xe=0; $xe < $maxitr; $xe++) {
-						if($i->{arf} eq $$format[$xe]) {
-							$enc = $i->{encode};
-							$arc = $i->{arc};
-							$encsel = $xe;
-							print STDERR "MATCH ON $xe\n" if($verbose > 5);
-							last;
+					for(my $xe=0; $xe < @$format; $xe++) {
+#						if($i->{arf} eq $$format[$xe]) {
+						if($i->{arf} eq $$format[$xe]->{f}) {
+							if($selw == -1 or $selw > $$format[$xe]->{w}) {
+								$enc = $i->{encode};
+								$arc = $i->{arc};
+								$encsel = $xe;
+								if($verbose > 5) {
+									if($selw > $$format[$xe]->{w}) {
+										print STDERR "BETTER MATCH ON $xe\n" ;
+									} else {
+										print STDERR "MATCH ON $xe\n" ;
+									}
+								}
+								$selw = $$format[$xe]->{w};
+							}
+						#	last;
 						}
 					}
 					last if($enc != undef);
 				}
+			}
+			if($encsel == -1) {
+				print STDERR "$langtable{error}: $fname:$l->{lnum}:",
+					" $opname - $langtable{addrunkn}\n$l->{ltxt}\n";
+				$errors++;
 			}
 			my @words;
 			if($arc != undef) {
@@ -1287,7 +1373,8 @@ sub FullParse {
 					$l->{reladdr} = 1;
 				}
 			}
-			@words = RunEncoder($enc, @{$$encode[$encsel]});
+#			@words = RunEncoder($enc, @{$$encode[$encsel]});
+			@words = RunEncoder($enc, @{$$format[$encsel]->{e}});
 			my ($avl, $dat, @bytes) = BinSplit(@words);
 			$l->{addr} = $vpc;
 			$vinstrend = ($avl / $cputable{CPUM});
@@ -1297,17 +1384,6 @@ sub FullParse {
 			}
 			$l->{ilen} = $vinstrend;
 
-			# Reencode for relative jumps
-			#($lformat, undef, @lencode) = DecodeSymbols($linearg, $itr, $arc);
-			### Debug block
-			#if($verbose > 3) {
-			#	$encode = join('||',@encode);
-			#	print STDERR "\n$format \"$encode\" $enc";
-			#	$encode = join('||',@lencode);
-			#	print STDERR "\n$lformat \"$encode\" $enc\n";
-			#}
-			###
-			#@words = RunEncoder($enc, @lencode);
 			my ($lavl, $ldat, @lbytes) = BinSplit(@words);
 			if($lavl != $avl) {
 				print STDERR "AVC: $avl $lavl\n" if($verbose > 3);
@@ -1331,31 +1407,12 @@ sub FullParse {
 					$vpc = 0 + $values[0];
 					$l->{addr} = $vpc;
 					$labelca = $vpc;
-				}
-				# rerun line labels
-				if($label ne '') {
-					if($symtable{$label}{type} ne "") {
-						if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $vpc) {
-							$symtable{$label}{val} = $vpc;
-							print STDERR "RRSYM: $label = $vpc\n" if($verbose > 3);
-							$flagpass++;
-						}
-					}
+					$labelcv = $vpc;
 				}
 			} elsif($macro eq '.EQU') {
 				#my ($type, $vec, $i, $v) = ParseSymbol($linearg,-1,1);
 				if(@values > 0) {
-					my $v = $values[0];
-					if($label ne '') {
-						if($symtable{$label}{val} != $v) {
-							print STDERR "RRSYM: $label ( $symtable{$label}{val} ) = $v\n" if($verbose > 2);
-							$symtable{$label}{val} = $v;
-
-							$l->{addr} = $vpc;
-							print STDERR "RRSYM: $label ( $symtable{$label}{val} )\n" if($verbose > 2);
-							$flagpass++;
-						}
-					}
+					$labelcv = $values[0];
 				}
 			} elsif($macro =~ /\.D(AT|[BDW])/) {
 				my @lencode;
@@ -1408,14 +1465,14 @@ sub FullParse {
 			}
 		}
 		# process line labels
-		if($label ne "" and ($macro ne '.EQU')) {
+		if($label ne "") {
 			if($symtable{$label}{type} ne "") {
-				if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $labelca) {
-					$symtable{$label}{val} = $labelca;
-					$l->{addr} = $labelca;
+				if($symtable{$label}{val} eq "*" || $symtable{$label}{val} != $labelcv) {
+					$symtable{$label}{val} = $labelcv;
 					print STDERR "SYMSET: $label $symtable{$label}{val}\n" if($verbose > 3);
 					$flagpass++;
 				}
+				$l->{addr} = $labelca;
 			}
 		}
 		# end process line
