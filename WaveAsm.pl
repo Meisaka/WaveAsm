@@ -45,7 +45,7 @@ my @macrotable = (
 	{op => '.DD', arc => -1, arf => '*', encode => 'M'}
 );
 
-print STDERR "Wave Asm - version 0.4.2\n";
+print STDERR "Wave Asm - version 0.4.3\n";
 foreach(@ARGV) {
 	if(/^--(.*)/) {
 		my $flags = $1;
@@ -168,9 +168,11 @@ sub LoadInstructions {
 						$att{nam} = $1;
 					} elsif($a =~ /^L([0-9]+)/) {
 						$att{len} = $1;
+					} elsif($a =~ /^O(-?[0-9]+)/) {
+						$att{ofs} = $1 * 1;
 					}
 				}
-				print STDERR "+NAME=$att{nam} +LEN=$att{len}\n" if($verbose > 4);
+				print STDERR "+NAME=$att{nam} +LEN=$att{len} +OFFSET=$att{ofs}\n" if($verbose > 4);
 			} else {
 				my ($range, @encode) = split(':', $_);
 				my ($rl,$ru) = split(',', $range);
@@ -178,7 +180,13 @@ sub LoadInstructions {
 				for my $i (@encode) {
 					$i = "L$att{len}*" if($i eq '*');
 				}
-				push @littable, ({rl => $rl, ru => $ru, nam => $att{nam}, encode => join(':',@encode)});
+				push @littable, ({
+						rl => $rl,
+						ru => $ru,
+						nam => $att{nam},
+						encode => join(':',@encode),
+						ofs=>$att{ofs}
+					});
 				print STDERR "LIT: $att{nam} $range $att{len} " . join(':',@encode) . "\n" if($verbose > 4);
 
 			}
@@ -202,7 +210,7 @@ sub LoadInstructions {
 				my $opname = ($opparam[0]);
 				$opname =~ s/"//g;
 				my $fcode = $opparam[2];
-				$fcode =~ s/"([^"]+)"/\1/;
+				$fcode =~ s/"([^"]*)"/\1/;
 				push @optable, {op => $opname, arc => $opparam[1], arf => $fcode, encode => $opparam[3]};
 				print STDERR "OPCODE: $opname $fcode\n" if($verbose > 4);
 			}
@@ -279,19 +287,22 @@ sub ParseValue {
 	my ($v, $rel) = @_;
 
 	my $ivf = [];
+	my $pv;
 	$v -= ($vpc + $vinstrend) if($rel == 1);
 	my $cname = '';
 	for my $r (@littable) {
 		if($r->{rl} eq '*') {
 			if($cname ne $r->{nam}) {
+				$pv = $v + $r->{ofs};
 				print STDERR "LLA: $v [ $r->{rl} $r->{ru} ]\n" if($verbose > 5);
-				push @$ivf, {type=>'V',nam => $r->{nam}, encode => $r->{encode}."+$v", val => $v};
+				push @$ivf, {type=>'V',nam => $r->{nam}, encode => $r->{encode}."+$pv", val => $v};
 				$cname = $r->{nam};
 			}
 		} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
 			if($cname ne $r->{nam}) {
+				$pv = $v + $r->{ofs};
 				print STDERR "LLR: $v [ $r->{rl} $r->{ru} ]\n" if($verbose > 5);
-				push @$ivf, {type=>'V',nam => $r->{nam}, encode => $r->{encode}."+$v", val => $v};
+				push @$ivf, {type=>'V',nam => $r->{nam}, encode => $r->{encode}."+$pv", val => $v};
 				$cname = $r->{nam};
 			}
 		}
@@ -845,7 +856,7 @@ sub FullParse {
 							# keyword
 							if($curop ne '') { push @lfs, $curop; $curop = ''; }
 							$curtype = 'K';
-							my ($fnd, $scr) = TestKeyW($arg);
+							my ($fnd, $scr) = TestKeyw($arg);
 							push @lfs, {type=>'K',nam=>$scr->{nam},encode=>$scr->{encode}};
 						} elsif($elem == 21) {
 							#ignore this
@@ -1049,22 +1060,33 @@ sub FullParse {
 			foreach my $i ( @optable ) {
 				# TODO: Use Hashes here!!!
 				if(($i->{op}) eq ($opname)) {
-					for(my $xe=0; $xe < @$format; $xe++) {
-						if($i->{arf} eq $$format[$xe]->{f}) {
-							if($selw == -1 or $selw > $$format[$xe]->{w}) {
-								$enc = $i->{encode};
-								$arc = $i->{arc};
-								$encsel = $xe;
-								if($verbose > 5) {
-									if($selw > $$format[$xe]->{w}) {
-										print STDERR "BETTER MATCH ON $xe\n" ;
-									} else {
-										print STDERR "MATCH ON $xe\n" ;
+					if($i->{arf} eq '') {
+						$enc = $i->{encode};
+						$arc = $i->{arc};
+						$encsel = 0;
+						$selw = 0;
+						if(@$format > 1) {
+							$encsel = -1;
+					print STDERR "ARFC $i->{arf} $i->{encode} ".@$format."\n" if($verbose > 5);
+						}
+					} else {
+						for(my $xe=0; $xe < @$format; $xe++) {
+							if($i->{arf} eq $$format[$xe]->{f}) {
+								if($selw == -1 or $selw > $$format[$xe]->{w}) {
+									$enc = $i->{encode};
+									$arc = $i->{arc};
+									$encsel = $xe;
+									if($verbose > 5) {
+										if($selw > $$format[$xe]->{w}) {
+											print STDERR "BETTER MATCH ON $xe\n" ;
+										} else {
+											print STDERR "MATCH ON $xe\n" ;
+										}
 									}
+									$selw = $$format[$xe]->{w};
 								}
-								$selw = $$format[$xe]->{w};
+							#	last;
 							}
-						#	last;
 						}
 					}
 					last if($enc != undef);
@@ -1083,6 +1105,7 @@ sub FullParse {
 				}
 			}
 			@words = RunEncoder($enc, @{$$format[$encsel]->{e}});
+			print STDERR "OPCE".join('+',@words)."\n" if($verbose > 5);
 			my ($avl, $dat, @bytes) = BinSplit(@words);
 			$l->{addr} = $vpc;
 			$vinstrend = ($avl / $cputable{CPUM});
@@ -1236,7 +1259,7 @@ sub LoadInclude {
 	for my $r (@linearg) {
 		print STDERR "T$r->{tkn} $r->{v} " if($verbose > 5);
 		if($r->{tkn} == 2) { $label = $r->{v}; }
-		if($r->{tkn} == 3) { $opname = $r->{v}; }
+		if($r->{tkn} == 3) { $opname = uc($r->{v}); }
 	}
 		print STDERR "\n" if($verbose > 5);
 		#$linearg =~ s/\+/ + /g;
