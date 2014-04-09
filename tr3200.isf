@@ -53,16 +53,16 @@ ALIGN:4
 -16383,16383:*
 # special encoding
 # encode all numbers as 0x10, +A append L32 bits, * encode in that
-*:0x4000:+AL32*
+*:%100+0x000:+AL32*
 # set Name"NAME", Length 19 bits
 # inmediate for P2
 +N"IN2",L19
 -131071,131071:*
-*:0x40000:+AL32*
+*:%100+0x0000:+AL32*
 # inmediate for P1
 +N"IN1",L23
 -2097151,2097151:*
-*:0x400000:+AL32*
+*:%100+0x00000:+AL32*
 </LIT>
 <OPCODE>
 # "NAME":params[,params...]:"paramformat":encoding
