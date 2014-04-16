@@ -40,6 +40,7 @@ my @macrotable = (
 	{op => '.ORG', arc => 1, arf => '*', encode => 'M'},
 	{op => '.EQU', arc => 1, arf => '*', encode => 'M'},
 	{op => '.DAT', arc => -1, arf => '*', encode => 'M'},
+	{op => '.DATA', arc => -1, arf => '*', encode => 'M'},
 	{op => '.DB', arc => -1, arf => '*', encode => 'M'},
 	{op => '.DW', arc => -1, arf => '*', encode => 'M'},
 	{op => '.DD', arc => -1, arf => '*', encode => 'M'}
@@ -1142,7 +1143,7 @@ sub FullParse {
 				if(@values > 0) {
 					$labelcv = $values[0];
 				}
-			} elsif($macro =~ /\.D(AT|[BDW])/) {
+			} elsif($macro =~ /\.D(AT|ATA|[BDW])/) {
 				my @lencode;
 				if($1 eq 'W') {
 					for my $x (@values) {

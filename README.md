@@ -33,10 +33,11 @@ Starting with version 0.3.0 macros and instructions are *not* case sensitive.
 WaveAsm currently supports 6 macros:
  - .ORG - setting where the code is generated for.
  - .EQU - Set the label on the line to whatever value is supplied.
- - .DAT - Encode values into minimally sized memory words in the endianess of the CPU
- - .DB - Same as .DAT currently
- - .DW - Similar to .DAT, except encode each value as a 16 bit Word
- - .DD - Similar to .DAT, except encode each value as a 32 bit Doubleword
+ - .DATA - Encode values into minimally sized memory words in the endianess of the CPU
+ - .DAT - alternate for .DATA
+ - .DB - Same as .DATA currently
+ - .DW - Similar to .DATA, except encode each value as a 16 bit Word
+ - .DD - Similar to .DATA, except encode each value as a 32 bit Doubleword
 
 Note:
 .ORG generates code to run a at specified address, but the default binary output format is flat, so a relocator or specific base load address will be needed.
