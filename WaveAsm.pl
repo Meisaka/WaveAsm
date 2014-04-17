@@ -1108,6 +1108,12 @@ sub FullParse {
 			@words = RunEncoder($enc, @{$$format[$encsel]->{e}});
 			print STDERR "OPCE".join('+',@words)."\n" if($verbose > 5);
 			my ($avl, $dat, @bytes) = BinSplit(@words);
+			if($cputable{ALIGN} > 1) {
+				my $addralign = $vpc % $cputable{ALIGN};
+				if($addralign > 0) {
+					$vpc += $cputable{ALIGN} - $addralign;
+				}
+			}
 			$l->{addr} = $vpc;
 			$vinstrend = ($avl / $cputable{CPUM});
 			$vpc += $vinstrend;
