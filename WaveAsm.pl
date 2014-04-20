@@ -1115,7 +1115,7 @@ sub FullParse {
 				}
 			}
 			$l->{addr} = $vpc;
-			$vinstrend = ($avl / $cputable{CPUM});
+			$vinstrend = int($avl / $cputable{CPUM});
 			$vpc += $vinstrend;
 			if($l->{ilen} != $vinstrend) {
 				$flagpass++;
@@ -1190,7 +1190,7 @@ sub FullParse {
 				print STDERR $txtbyte . "\n" if($verbose > 2);
 				# encode data
 				$l->{addr} = $vpc;
-				$vinstrend = ($avl / $cputable{CPUM});
+				$vinstrend = int($avl / $cputable{CPUM});
 				$vpc += $vinstrend;
 				$flagpass++ if($l->{ilen} != $vinstrend);
 				$l->{ilen} = $vinstrend + 0;
