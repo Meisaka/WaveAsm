@@ -40,12 +40,12 @@ Numbers, example and sizes:
 - 123 decimal, whole is compressed to smallest number of bits
 
 consists of sequences separated by SP.
-each sequence must contain a concatenate "+" character (v1).
+each sequence MUST contain a concatenate "+" character, even if it contains only a single element (v1).
 Multiple elements in a sequence are seperated the "+" character.
-each sequence is encoded from left to right, MSB to LSB into memory words, sequences larger than a memory word are stored in the endianness of the CPU.
+Each sequence is encoded from left to right, MSB to LSB into memory words, sequences larger than a memory word are stored in the endianness of the CPU.
 
 ### section specific
-In the OPCODE section there is additional back reference value, that is a backslash "\" followed by a 1 indexed decimal number. The back reference is replaced by the encoding of name it indexes from the "format" field.
+In the OPCODE section there is an additional back reference value, that is a backslash "\" followed by a 1 indexed decimal number. The back reference is replaced by the encoding of name it indexes from the "format" field.
 
 In the LIT section there is the current value reference "*", it is normally treated as a decimal number.
 
@@ -69,7 +69,8 @@ Lines in the HEAD section are key-value pairs seperated by the ":" character.
 
 KEYWORD Section
 ----
-TODO
+
+Keywords are identifiers reserved by the instruction set to indicate alternate/special encodings or usages, or to act as meta data for reflection.
 
     Attribtype := char*1
     Attrib := Attribtype value
@@ -80,7 +81,8 @@ TODO
 
 REG Section
 ----
-TODO
+
+Defines and describes registers in an instruction set. Register names are treated as special keywords, and are **NOT** case sensitive.
 
     Attribtype := char*1
     Attrib := Attribtype value
@@ -94,13 +96,26 @@ TODO
 
 LIT Section
 ----
-TODO
+
+This section defines literal values, and specifies how constant values are encoded into instructions that may support them.
+Literals are defined by their length in bits and by one or more encoding definitions.
+Each encoding definition may specify a range or "*" to match any number.
+The order of lines with each definition is significant, the most specific/smallest ranges must come before larger or more general ranges.
+The "*" line (if any) MUST be last in the list.
+
+The special "O" and "M" attributes allow simple trasforms to the number before encoding, "O" will add to the given value, "M" will perform an arithmatic right shift. "O" is always performed before "M" if both are set.
+
+The "S" attribute, indicates that the value (up to specified bit size) can be treated as signed by the encoder and will be sign-extended when decoded and evaluated.
+Used to indicate that large unsigned values may be converted to signed numbers, that may end up with a low magnitude, match a better literal range, and ultimately be encoded more efficiently.
 
     Attribtype := char*1
     Attrib := Attribtype + value
     Attribs := "+" Attrib ["," Attrib]*
     NameAttrib := "N" + string(LitName)
     LengthAttrib := "L" + number(length)
+    SignedAttrib := "S" + number(eval bits)
+    OffsetAttrib := "O" + number(add)
+    ShiftAttrib := "M" + number(right shift bits)
     LitVal := "*" | number(inclusive range)
     LitDef := LitVal(lower) ["," LitVal(upper)] [":" Encoding [":" Encoding ...] ]
 
@@ -120,12 +135,13 @@ Format overview:
 OPCODE Section
 ----
 Defines Opcodes, their argument format (if any), and encoding.
+For relative mode opcodes, all literal values are treated as an address and converted to an offset before scanning LIT ranges.
 
 Format overview:
 
     format := ( [LitName | RegName | "," | "#" | "[" | "]" | "(" | ")" | "+"] )*
     paramformat := string(format)
-    OpName := ( LETTER | "." | "_" ) (LETTER | DIGIT | "." | "_")*
+    OpName := ( LETTER | "_" ) (LETTER | DIGIT | "." | "_")*
     paramsv1 := [ number(argument count) ] [ "," "r"(relative mode) ]
     params := paramsv1 | paramsv2
     Opcode := OpName ":" params[,params...] ":" paramformat ":" Encoding

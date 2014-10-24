@@ -46,7 +46,7 @@ my @macrotable = (
 	{op => '.DD', arc => -1, arf => '*', encode => 'M'}
 );
 
-print STDERR "Wave Asm - version 0.4.3\n";
+print STDERR "Wave Asm - version 0.4.4\n";
 foreach(@ARGV) {
 	if(/^--(.*)/) {
 		my $flags = $1;
@@ -170,7 +170,9 @@ sub LoadInstructions {
 					} elsif($a =~ /^L([0-9]+)/) {
 						$att{len} = $1;
 					} elsif($a =~ /^O(-?[0-9]+)/) {
-						$att{ofs} = $1 * 1;
+						$att{ofs} = int($1);
+					} elsif($a =~ /^M([0-9]+)/) {
+						$att{shf} = int($1);
 					}
 				}
 				print STDERR "+NAME=$att{nam} +LEN=$att{len} +OFFSET=$att{ofs}\n" if($verbose > 4);
@@ -186,7 +188,8 @@ sub LoadInstructions {
 						ru => $ru,
 						nam => $att{nam},
 						encode => join(':',@encode),
-						ofs=>$att{ofs}
+						ofs=>$att{ofs},
+						shf=>$att{shf}
 					});
 				print STDERR "LIT: $att{nam} $range $att{len} " . join(':',@encode) . "\n" if($verbose > 4);
 
@@ -285,6 +288,7 @@ sub DecodeValue {
 }
 
 sub ParseValue {
+	use integer;
 	my ($v, $rel) = @_;
 
 	my $ivf = [];
@@ -295,6 +299,7 @@ sub ParseValue {
 		if($r->{rl} eq '*') {
 			if($cname ne $r->{nam}) {
 				$pv = $v + $r->{ofs};
+				$pv = $pv >> $r->{shf} if ($r->{shf} > 0);
 				print STDERR "LLA: $v [ $r->{rl} $r->{ru} ]\n" if($verbose > 5);
 				push @$ivf, {type=>'V',nam => $r->{nam}, encode => $r->{encode}."+$pv", val => $v};
 				$cname = $r->{nam};
@@ -302,6 +307,7 @@ sub ParseValue {
 		} elsif(($r->{rl} <= $v) && ($r->{ru} >= $v)) {
 			if($cname ne $r->{nam}) {
 				$pv = $v + $r->{ofs};
+				$pv = $pv >> $r->{shf} if ($r->{shf} > 0);
 				print STDERR "LLR: $v [ $r->{rl} $r->{ru} ]\n" if($verbose > 5);
 				push @$ivf, {type=>'V',nam => $r->{nam}, encode => $r->{encode}."+$pv", val => $v};
 				$cname = $r->{nam};
