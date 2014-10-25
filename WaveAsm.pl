@@ -33,7 +33,7 @@ my @asmqueue = ( );
 # CPU specs (these are replaced in loaded file)
 my %cputable = (ISN => "NONE", FILEW => 8, CPUW => 8, CPUM => 8, CPUE => "LE", FILEE => "LE", ALIGN => 0);
 
-my @optable = (
+my %optable = (
 );
 # build-in macros
 my @macrotable = (
@@ -46,7 +46,7 @@ my @macrotable = (
 	{op => '.DD', arc => -1, arf => '*', encode => 'M'}
 );
 
-print STDERR "Wave Asm - version 0.4.4\n";
+print STDERR "Wave Asm - version 0.5.0\n";
 foreach(@ARGV) {
 	if(/^--(.*)/) {
 		my $flags = $1;
@@ -79,8 +79,8 @@ foreach(@ARGV) {
 # load ISF
 LoadInstructions( $instructionsetfile );
 print STDERR "<optable>\n" if($verbose > 2);
-foreach my $o (@optable) {
-	print STDERR $o->{op} . " " if($verbose > 2);
+foreach my $o (keys %optable) {
+	print STDERR $o . ":" . @{$optable{$o}} . " " if($verbose > 2);
 }
 print STDERR "\n<regtable>\n" if($verbose > 2);
 foreach my $o (@regtable) {
@@ -211,11 +211,14 @@ sub LoadInstructions {
 			} elsif(/^\W*$/) {
 			} else {
 				my @opparam = split(':', $_);
-				my $opname = ($opparam[0]);
+				my $opname = uc($opparam[0]);
 				$opname =~ s/"//g;
 				my $fcode = $opparam[2];
 				$fcode =~ s/"([^"]*)"/\1/;
-				push @optable, {op => $opname, arc => $opparam[1], arf => $fcode, encode => $opparam[3]};
+				if(! exists $optable{$opname} ) {
+					$optable{$opname} = [];
+				}
+				push @{$optable{$opname}}, {op => $opname, arc => $opparam[1], arf => $fcode, encode => $opparam[3]};
 				print STDERR "OPCODE: $opname $fcode\n" if($verbose > 4);
 			}
 		} elsif(/^[\t ]*#/) {
@@ -319,10 +322,8 @@ sub ParseValue {
 
 sub TestOp {
 	my ($opname) = @_;
-	for my $i ( @optable ) {
-		if(uc($i->{op}) eq uc($opname)) {
-			return (1, $i);
-		}
+	if( exists $optable{uc($opname)}) {
+		return (1, $optable{uc($opname)});
 	}
 	return (0, undef);
 }
@@ -774,6 +775,38 @@ sub RunEncoder {
 	}
 	return @output;
 }
+sub adump {
+	my $t = $_[1];
+	print STDERR ("  "x$t) . "[\n";
+	for my $q ( @{$_[0]} ) {
+		if(ref($q) eq 'HASH') {
+			print STDERR "\n";
+			hdump($q, $t+1);
+		} elsif(ref($q) eq 'ARRAY') {
+			print STDERR "\n";
+			adump($q, $t+1);
+		} else {
+			print STDERR ("  "x$t) . ", \"$q\"";
+			print STDERR "\n";
+		}
+	}
+	print STDERR ("  "x$t) . "]\n";
+}
+sub hdump {
+	my $t = $_[1];
+	print STDERR ("  "x$t) . "{\n";
+	for my $q ( keys %{$_[0]} ) {
+		my $v = $_[0]->{$q};
+		print STDERR ("  "x$t) . " $q => ";
+		if(ref($v) eq 'ARRAY') {
+			print STDERR "\n";
+			adump($_[0]->{$q}, $t+1);
+		} else {
+			print STDERR "\"$v\"\n";
+		}
+	}
+	print STDERR ("  "x$t) . "}\n";
+}
 
 sub FullParse {
 	for my $l (@allfile) {
@@ -795,6 +828,7 @@ sub FullParse {
 		my $curtype = '';
 		my $curop = '';
 
+		print STDERR "Parsing line $l->{lnum}\n" if($verbose > 3);
 		for my $r (@$linearg) {
 			my $arg = $r->{v};
 			my $elem = $r->{tkn};
@@ -824,7 +858,7 @@ sub FullParse {
 				}
 			} else {
 				if($lss > 1) {
-					if($elem != 20 and $elem != 1) {
+					if($elem != 20 and $elem != 1) { # 20 comma
 						if($elem != 21) {
 							print STDERR "[ELEM'$arg']" if($verbose > 5);
 						}
@@ -1019,6 +1053,12 @@ sub FullParse {
 			}
 		}
 		# process line
+		print STDERR "Processing line $l->{lnum}\n" if($verbose > 3);
+
+		# useful debugging functions
+		if($verbose > 5) {
+			adump(\@format, 0);
+		}
 		if($opname ne '') {
 			print STDERR "OPC: $opname\n" if($verbose > 4);
 			$format = [ ];
@@ -1034,14 +1074,15 @@ sub FullParse {
 					my $x = $format[$q];
 
 					if(ref($x) eq 'HASH') {
+					print STDERR "FP: HASH\n" if($verbose > 5);
 					} elsif(ref($x) eq 'ARRAY') {
 						for(my $xe=0; $xe < $maxitr; $xe++) {
 
 							$$format[$xc*$maxitr+$xe]->{w} = $xe + $xc;
 							$$format[$xc*$maxitr+$xe]->{f} .= $$x[($xe+$xr*$xc) % @$x]->{f};
-							push @{$$format[$xc*$maxitr+$xe]->{e}}, join(' ',@{$$x[($xe+$xr*$xc) % @$x]->{e}});
+							push @{$$format[$xc*$maxitr+$xe]->{e}}, @{$$x[($xe+$xr*$xc) % @$x]->{e}};
 		print STDERR "EP: $xe $xr $xc ".$$x[($xe+$xr*$xc) % @$x]->{f}."="
-		. join('--',@{$$x[($xe+$xr*$xc) % @$x]->{e}}) . "\t" if($verbose > 5);
+		. join('--',@{$$x[($xe+$xr*$xc) % @$x]->{e}}) . "\n" if($verbose > 5);
 						}
 					} else {
 						$xr++;
@@ -1053,10 +1094,12 @@ sub FullParse {
 					print STDERR "\n" if($verbose > 5);
 				}
 			}
-			if($verbose > 4) {
+			if($verbose > 5) {
+				adump($format, 0);
+			} elsif($verbose > 4) {
 				for(my $xe=0; $xe < @$format; $xe++) {
 					print STDERR "SCNFMT: ". $$format[$xe]->{f} . "\n";
-					print STDERR "SCNENC: ". join(' ', @{$$format[$xe]->{e}})."\n";
+					print STDERR "SCNENC: ". join('\\', @{$$format[$xe]->{e}})."\n";
 				}
 			}
 
@@ -1064,40 +1107,37 @@ sub FullParse {
 			my $arc = undef;
 			my $encsel = -1;
 			my $selw = -1;
-			foreach my $i ( @optable ) {
-				# TODO: Use Hashes here!!!
-				if(($i->{op}) eq ($opname)) {
-					if($i->{arf} eq '') {
-						$enc = $i->{encode};
-						$arc = $i->{arc};
-						$encsel = 0;
-						$selw = 0;
-						if(@$format > 1) {
-							$encsel = -1;
-					print STDERR "ARFC $i->{arf} $i->{encode} ".@$format."\n" if($verbose > 5);
-						}
-					} else {
-						for(my $xe=0; $xe < @$format; $xe++) {
-							if($i->{arf} eq $$format[$xe]->{f}) {
-								if($selw == -1 or $selw > $$format[$xe]->{w}) {
-									$enc = $i->{encode};
-									$arc = $i->{arc};
-									$encsel = $xe;
-									if($verbose > 5) {
-										if($selw > $$format[$xe]->{w}) {
-											print STDERR "BETTER MATCH ON $xe\n" ;
-										} else {
-											print STDERR "MATCH ON $xe\n" ;
-										}
+			foreach my $i ( @{$optable{$opname}} ) {
+				if($i->{arf} eq '') {
+					$enc = $i->{encode};
+					$arc = $i->{arc};
+					$encsel = 0;
+					$selw = 0;
+					if(@$format > 1) {
+						$encsel = -1;
+				print STDERR "ARFC $i->{arf} $i->{encode} ".@$format."\n" if($verbose > 5);
+					}
+				} else {
+					for(my $xe=0; $xe < @$format; $xe++) {
+						if($i->{arf} eq $$format[$xe]->{f}) {
+							if($selw == -1 or $selw > $$format[$xe]->{w}) {
+								$enc = $i->{encode};
+								$arc = $i->{arc};
+								$encsel = $xe;
+								if($verbose > 5) {
+									if($selw > $$format[$xe]->{w}) {
+										print STDERR "BETTER MATCH ON $xe\n" ;
+									} else {
+										print STDERR "MATCH ON $xe\n" ;
 									}
-									$selw = $$format[$xe]->{w};
 								}
-							#	last;
+								$selw = $$format[$xe]->{w};
 							}
+						#	last;
 						}
 					}
-					last if($enc != undef);
 				}
+				last if($enc != undef);
 			}
 			if($encsel == -1) {
 				print STDERR "$langtable{error}: $fname:$l->{lnum}:",
@@ -1254,7 +1294,6 @@ sub LoadInclude {
 		s/\n//;
 		my $prl = $_;
 		$prl =~ s/;.*$//;
-		#$prl =~ s/^\W*$//;
 		if($prl =~ /^[ \t]*$/) { # blank line
 			next;
 		}
@@ -1266,8 +1305,8 @@ sub LoadInclude {
 			}
 			next;
 		}
-		my ($label,$opname,@linearg);# = split(/[ \t]+/, $prl);
-		my $linearg;# = join(' ',@linearg);
+		my ($label,$opname,@linearg);
+		my $linearg;
 		@linearg = TokenizeLine($prl,$file);
 	for my $r (@linearg) {
 		print STDERR "T$r->{tkn} $r->{v} " if($verbose > 5);
@@ -1291,23 +1330,14 @@ sub LoadInclude {
 				}
 			}
 		}
-		my $enc = undef;
 		if($opname ne '') {
-			my $found = 0;
-			foreach my $i ( @optable ) {
-				if(($i->{op}) eq ($opname)) {
-					$enc = $i->{encode};
-					$found = 1;
-					last;
-				}
-			}
-			if($found == 0) {
+			if(! exists $optable{$opname} ) {
 				print STDERR "$langtable{error}: $file:$.: $opname - $langtable{opunkn}\n$_\n";
 				$errors++;
 			}
 		}
 		push @allfile, {lnum => $., fnum => $fnum, ltxt => $_, label => $label, op => $opname, line => \@linearg};
-		print STDERR join("\t",($.,$label,$opname,$enc))."\n" if($verbose > 2);
+		print STDERR join("\t",($.,$label,$opname))."\n" if($verbose > 2);
 	}
 	close ISF;
 }
@@ -1322,8 +1352,10 @@ sub WriteListing {
 		my ($linearg) = ($l->{line});
 		my $lss = 0;
 		print OSF join("\t",($l->{lnum},sprintf("%08x",$l->{addr})))." ";
+		my $la = '';
 		for my $r (@$linearg) {
-			if($r->{tkn} == 2) { print OSF $r->{v} . "\t"; $lss = 1;
+			if($r->{tkn} == 2) {
+				print OSF $r->{v} . ":\t"; $lss = 1;
 			} elsif($r->{tkn} == 3) {
 				print OSF " \t" if($lss == 0);
 				print OSF $r->{v} . "\t"; $lss = 2;
@@ -1331,10 +1363,15 @@ sub WriteListing {
 				print OSF " \t" if($lss == 0);
 				print OSF $r->{v} ."\t"; $lss = 2;
 			} elsif($r->{tkn} != 21) {
-				print OSF $r->{v};
+				$la .= '0x' if($r->{tkn} == 6);
+				$la .= $r->{v};
 			}
 		}
-		print OSF "\t" . $l->{byte} . "\n" ;
+		print OSF $la;
+		if(length($la) < 24) {
+			print OSF (" " x (24 - length($la)));
+		}
+		print OSF $l->{byte} . "\n" ;
 	}
 	print OSF "Symbols:\n" if($verbose > 0);
 	foreach my $l (keys %symtable) {
