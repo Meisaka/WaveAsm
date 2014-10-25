@@ -1,8 +1,8 @@
 # Comment
 <HEAD>
 ISN:"TR3200"
-ISD:"TR3200 CPU Instruction set from doc 0.10"
-# endian-ness LE (little endian), BE (big endian), NE (endianless i.e. PY
+ISD:"TR3200 CPU Instruction set 0.3.0"
+# endian-ness LE (little endian)
 CPUE:LE
 # memory word size
 CPUM:8
@@ -16,218 +16,295 @@ ALIGN:4
 </HEAD>
 <REG>
 # attribs set Index 32 bit,Data 32 bit,encode Length 5 (bits),Name"R"
-# name defines which encoding to use, must be unique
 +I32,D32,L5,N"R"
 # name[,alias]:<encoding>
-# # dec, compacted into minimum bits (using current alignment)
-# 0x# hex, each nibble adds 4 bits
-# %# bin, each bit is a bit
-%r0,%R0:%0000
-%r1,%R1:%0001
-%r2,%R2:%0010
-%r3,%R3:%0011
-%r4,%R4:%0100
-%r5,%R5:%0101
-%r6,%R6:%0110
-%r7,%R7:%0111
-%r8,%R8:%1000
-%r9,%R9:%1001
-%r10,%R10:%1010
-%r11,%R11,%y,%Y:%1011
-%r12,%R12,%bp,%BP:%1100
-%r13,%R13,%sp,%SP:%1101
-%r14,%R14,%ia,%IA:%1110
-%r15,%R15,%flags,%FLAGS:%1111
+%r0:%0000
+%r1:%0001
+%r2:%0010
+%r3:%0011
+%r4:%0100
+%r5:%0101
+%r6:%0110
+%r7:%0111
+%r8:%1000
+%r9:%1001
+%r10:%1010
+%r11,%y:%1011
+%r12,%bp:%1100
+%r13,%sp:%1101
+%r14,%ia:%1110
+%r15,%flags:%1111
 # attrib set Special 32 bit, encode Length 4 bits
 # Special reserves the names, they may or may not have encodings
 +S32,L4
 %pc
 </REG>
 <LIT>
-# set Name"NAME", Length 15 bits
-+N"IN3",L15
 # <num>[,<rangeend>]:<encoding>[:<extended encoding>]
-  # Encoding can be number, range or special
-	# * first match any number
-# * encode number verbatum
--16383,16383:*
-# special encoding
-# encode all numbers as 0x10, +A append L32 bits, * encode in that
-*:%100+0x000:+AL32*
-# set Name"NAME", Length 19 bits
-# inmediate for P2
-+N"IN2",L19
--131071,131071:*
-*:%100+0x0000:+AL32*
-# inmediate for P1
-+N"IN1",L23
--2097151,2097151:*
+# immediates for P3
++N"SI3",L14
+-8192,8191:L14*
++N"LI3",L14
+*:%00+0x000:+AL32*
+# immediates for P2
++N"SI2",L18
+-131072,131071:*
++N"LI2",L18
+*:%00+0x0000:+AL32*
+# immediate for P1
++N"IN1",L22
+-2097152,2097151:%0+L22*
+*:%100+0x00000:+AL32*
+# P2 and P1 for jump codes
++N"SJ2",L18,M2
+-524288,524284:*
++N"LJ2",L18
+*:%00+0x0001:+AL32*
++N"JN1",L22,M2
+-8388608,8388604:%0+L22*
 *:%100+0x00000:+AL32*
 </LIT>
-<GROUP>
-"RRG":"R+R":\2+\1
-"RRG":"[R+R]":\2+\1
-"RIG":"R+IN3":\2+\1
-"RIG":"[R+IN3]":\2+\1
-</GROUP>
 <OPCODE>
 # "NAME":params[,params...]:"paramformat":encoding
 # \# is param referance
-# numbers always use minimum bits (1 being lowest)
-# binary numbers %... are always exactly as specified
-# param format contains names (above) and is referenced by order in encoding
-# reverse format "L+R,R" is also excepted
 
-# Memory Opcodes and aliases
-# There are no opcodes persey without a literal, so a literal of zero is implied for convience
-# Type + Opcode + M bit + paramaters
+# Type + Opcode + M bit + L bit + paramaters
 #
 # -- P3 instructions ---------------------------------------------------------
-#     Rd,Rs,Rn                         Rn Rs Rd
-AND:3:"R,R,R":L32           0x80+0x000+\3+\2+\1
-AND:3:"R,R,IN3":L32         0x80+%1+\3+\2+\1
-OR:3:"R,R,R":L32            0x81+0x000+\3+\2+\1
-OR:3:"R,R,IN3":L32          0x81+%1+\3+\2+\1
-XOR:3:"R,R,R":L32           0x82+0x000+\3+\2+\1
-XOR:3:"R,R,IN3":L32         0x82+%1+\3+\2+\1
-BITC:3:"R,R,R":L32          0x83+0x000+\3+\2+\1
-BITC:3:"R,R,IN3":L32        0x83+%1+\3+\2+\1
+#     Rd,Rs,Rn                    Rn Rs Rd
+AND:3:"R,R,R":L32      0x80+%00+\1+\2+%00+0x00+\3
+AND:3:"R,R,SI3":L32    0x80+%10+\1+\2+\3
+AND:3:"R,R,LI3":L32    0x80+%11+\1+\2+\3
+OR:3:"R,R,R":L32       0x81+%00+\1+\2+%00+0x00+\3
+OR:3:"R,R,SI3":L32     0x81+%10+\1+\2+\3
+OR:3:"R,R,LI3":L32     0x81+%11+\1+\2+\3
+XOR:3:"R,R,R":L32      0x82+%00+\1+\2+%00+0x00+\3
+XOR:3:"R,R,SI3":L32    0x82+%10+\1+\2+\3
+XOR:3:"R,R,LI3":L32    0x82+%11+\1+\2+\3
+BITC:3:"R,R,R":L32     0x83+%00+\1+\2+%00+0x00+\3
+BITC:3:"R,R,SI3":L32   0x83+%10+\1+\2+\3
+BITC:3:"R,R,LI3":L32   0x83+%11+\1+\2+\3
 #
-ADD:3:"R,R,R":L32           0x84+0x000+\3+\2+\1
-ADD:3:"R,R,IN3":L32         0x84+%1+\3+\2+\1
-ADDC:3:"R,R,R":L32          0x85+0x000+\3+\2+\1
-ADDC:3:"R,R,IN3":L32        0x85+%1+\3+\2+\1
-SUB:3:"R,R,R":L32           0x86+0x000+\3+\2+\1
-SUB:3:"R,R,IN3":L32         0x86+%1+\3+\2+\1
-SUBB:3:"R,R,R":L32          0x87+0x000+\3+\2+\1
-SUBB:3:"R,R,IN3":L32        0x87+%1+\3+\2+\1
-RSB:3:"R,R,R":L32           0x88+0x000+\3+\2+\1
-RSB:3:"R,R,IN3":L32         0x88+%1+\3+\2+\1
-RSBB:3:"R,R,R":L32          0x89+0x000+\3+\2+\1
-RSBB:3:"R,R,IN3":L32        0x89+%1+\3+\2+\1
+ADD:3:"R,R,R":L32      0x84+%00+\1+\2+%00+0x00+\3
+ADD:3:"R,R,SI3":L32    0x84+%10+\1+\2+\3
+ADD:3:"R,R,LI3":L32    0x84+%11+\1+\2+\3
+ADDC:3:"R,R,R":L32     0x85+%00+\1+\2+%00+0x00+\3
+ADDC:3:"R,R,SI3":L32   0x85+%10+\1+\2+\3
+ADDC:3:"R,R,LI3":L32   0x85+%11+\1+\2+\3
+SUB:3:"R,R,R":L32      0x86+%00+\1+\2+%00+0x00+\3
+SUB:3:"R,R,SI3":L32    0x86+%10+\1+\2+\3
+SUB:3:"R,R,LI3":L32    0x86+%11+\1+\2+\3
+SUBB:3:"R,R,R":L32     0x87+%00+\1+\2+%00+0x00+\3
+SUBB:3:"R,R,SI3":L32   0x87+%10+\1+\2+\3
+SUBB:3:"R,R,LI3":L32   0x87+%11+\1+\2+\3
+RSB:3:"R,R,R":L32      0x88+%00+\1+\2+%00+0x00+\3
+RSB:3:"R,R,SI3":L32    0x88+%10+\1+\2+\3
+RSB:3:"R,R,LI3":L32    0x88+%11+\1+\2+\3
+RSBB:3:"R,R,R":L32     0x89+%00+\1+\2+%00+0x00+\3
+RSBB:3:"R,R,SI3":L32   0x89+%10+\1+\2+\3
+RSBB:3:"R,R,LI3":L32   0x89+%11+\1+\2+\3
 #
-LLS:3:"R,R,R":L32           0x8A+0x000+\3+\2+\1
-LLS:3:"R,R,IN3":L32         0x8A+%1+\3+\2+\1
-LRS:3:"R,R,R":L32           0x8B+0x000+\3+\2+\1
-LRS:3:"R,R,IN3":L32         0x8B+%1+\3+\2+\1
-ARS:3:"R,R,R":L32           0x8C+0x000+\3+\2+\1
-ARS:3:"R,R,IN3":L32         0x8C+%1+\3+\2+\1
-ROTL:3:"R,R,R":L32          0x8D+0x000+\3+\2+\1
-ROTL:3:"R,R,IN3":L32        0x8D+%1+\3+\2+\1
-ROTR:3:"R,R,R":L32          0x8E+0x000+\3+\2+\1
-ROTR:3:"R,R,IN3":L32        0x8E+%1+\3+\2+\1
+LLS:3:"R,R,R":L32      0x8A+%00+\1+\2+%00+0x00+\3
+LLS:3:"R,R,SI3":L32    0x8A+%10+\1+\2+\3
+LLS:3:"R,R,LI3":L32    0x8A+%11+\1+\2+\3
+LRS:3:"R,R,R":L32      0x8B+%00+\1+\2+%00+0x00+\3
+LRS:3:"R,R,SI3":L32    0x8B+%10+\1+\2+\3
+LRS:3:"R,R,LI3":L32    0x8B+%11+\1+\2+\3
+ARS:3:"R,R,R":L32      0x8C+%00+\1+\2+%00+0x00+\3
+ARS:3:"R,R,SI3":L32    0x8C+%10+\1+\2+\3
+ARS:3:"R,R,LI3":L32    0x8C+%11+\1+\2+\3
+ROTL:3:"R,R,R":L32     0x8D+%00+\1+\2+%00+0x00+\3
+ROTL:3:"R,R,SI3":L32   0x8D+%10+\1+\2+\3
+ROTL:3:"R,R,LI3":L32   0x8D+%11+\1+\2+\3
+ROTR:3:"R,R,R":L32     0x8E+%00+\1+\2+%00+0x00+\3
+ROTR:3:"R,R,SI3":L32   0x8E+%10+\1+\2+\3
+ROTR:3:"R,R,LI3":L32   0x8E+%11+\1+\2+\3
 #
-MUL:3:"R,R,R":L32           0x8F+0x000+\3+\2+\1
-MUL:3:"R,R,IN3":L32         0x8F+%1+\3+\2+\1
-SMUL:3:"R,R,R":L32          0x90+0x000+\3+\2+\1
-SMUL:3:"R,R,IN3":L32        0x90+%1+\3+\2+\1
-DIV:3:"R,R,R":L32           0x91+0x000+\3+\2+\1
-DIV:3:"R,R,IN3":L32         0x91+%1+\3+\2+\1
-SDIV:3:"R,R,R":L32          0x92+0x000+\3+\2+\1
-SDIV:3:"R,R,IN3":L32        0x92+%1+\3+\2+\1
-#     Rd,Rs,Rn                         Rn Rs Rd
-LOAD:3:"R,R,R":L32          0x93+0x000+\3+\2+\1
-LOAD:3:"R,RRG":L32          0x93+0x000+\2+\1
-LOAD:3:"R,R,IN3":L32        0x93+%1+\3+\2+\1
-LOAD:3:"R,RIG":L32        0x93+%1+\2+\1
-LOADW:3:"R,R,R":L32         0x94+0x000+\3+\2+\1
-LOADW:3:"R,RRG":L32         0x94+0x000+\2+\1
-LOADW:3:"R,R,IN3":L32       0x94+%1+\3+\2+\1
-LOADW:3:"R,RIG":L32       0x94+%1+\2+\1
-LOADB:3:"R,R,R":L32         0x95+0x000+\3+\2+\1
-LOADB:3:"R,RRG":L32         0x95+0x000+\2+\1
-LOADB:3:"R,R,IN3":L32       0x95+%1+\3+\2+\1
-LOADB:3:"R,RIG":L32       0x95+%1+\2+\1
-#     Rs,Rn,Rd                         Rn Rs Rd
-STORE:3:"R,R,R":L32         0x96+0x000+\2+\1+\3
-STORE:3:"RRG,R":L32         0x96+0x000+\1+\2
-STORE:3:"R,IN3,R":L32       0x96+%1+\2+\1+\3
-STORE:3:"RIG,R":L32       0x96+%1+\1+\2
-STOREW:3:"R,R,R":L32        0x97+0x000+\2+\1+\3
-STOREW:3:"RRG,R":L32        0x97+0x000+\1+\2
-STOREW:3:"R,IN3,R":L32      0x97+%1+\2+\1+\3
-STOREW:3:"RIG,R":L32      0x97+%1+\1+\2
-STOREB:3:"R,R,R":L32        0x98+0x000+\2+\1+\3
-STOREB:3:"RRG,R":L32        0x98+0x000+\1+\2
-STOREB:3:"R,IN3,R":L32      0x98+%1+\2+\1+\3
-STOREB:3:"RIG,R":L32      0x98+%1+\1+\2
+MUL:3:"R,R,R":L32      0x8F+%00+\1+\2+%00+0x00+\3
+MUL:3:"R,R,SI3":L32    0x8F+%10+\1+\2+\3
+MUL:3:"R,R,LI3":L32    0x8F+%11+\1+\2+\3
+SMUL:3:"R,R,R":L32     0x90+%00+\1+\2+%00+0x00+\3
+SMUL:3:"R,R,SI3":L32   0x90+%10+\1+\2+\3
+SMUL:3:"R,R,LI3":L32   0x90+%11+\1+\2+\3
+DIV:3:"R,R,R":L32      0x91+%00+\1+\2+%00+0x00+\3
+DIV:3:"R,R,SI3":L32    0x91+%10+\1+\2+\3
+DIV:3:"R,R,LI3":L32    0x91+%11+\1+\2+\3
+SDIV:3:"R,R,R":L32     0x92+%00+\1+\2+%00+0x00+\3
+SDIV:3:"R,R,SI3":L32   0x92+%10+\1+\2+\3
+SDIV:3:"R,R,LI3":L32   0x92+%11+\1+\2+\3
+#     Rd,Rs,Rn                   Rd Rs Rn
+LOAD:3:"R,R,R":L32     0x93+%00+\1+\2+%00+0x00+\3
+LOAD:3:"R,R+R":L32     0x93+%00+\1+\2+%00+0x00+\3
+LOAD:3:"R,[R+R]":L32   0x93+%00+\1+\2+%00+0x00+\3
+LOAD:3:"R,R,SI3":L32   0x93+%10+\1+\2+\3
+LOAD:3:"R,R+SI3":L32   0x93+%10+\1+\2+\3
+LOAD:3:"R,[R+SI3]":L32 0x93+%10+\1+\2+\3
+LOAD:3:"R,R,LI3":L32   0x93+%11+\1+\2+\3
+LOAD:3:"R,R+LI3":L32   0x93+%11+\1+\2+\3
+LOAD:3:"R,[R+LI3]":L32 0x93+%11+\1+\2+\3
+# word loads
+LOADW:3:"R,R,R":L32     0x94+%00+\1+\2+%00+0x00+\3
+LOADW:3:"R,R+R":L32     0x94+%00+\1+\2+%00+0x00+\3
+LOADW:3:"R,[R+R]":L32   0x94+%00+\1+\2+%00+0x00+\3
+LOADW:3:"R,R,SI3":L32   0x94+%10+\1+\2+\3
+LOADW:3:"R,R+SI3":L32   0x94+%10+\1+\2+\3
+LOADW:3:"R,[R+SI3]":L32 0x94+%10+\1+\2+\3
+LOADW:3:"R,R,LI3":L32   0x94+%11+\1+\2+\3
+LOADW:3:"R,R+LI3":L32   0x94+%11+\1+\2+\3
+LOADW:3:"R,[R+LI3]":L32 0x94+%11+\1+\2+\3
+# byte loads
+LOADB:3:"R,R,R":L32     0x95+%00+\1+\2+%00+0x00+\3
+LOADB:3:"R,R+R":L32     0x95+%00+\1+\2+%00+0x00+\3
+LOADB:3:"R,[R+R]":L32   0x95+%00+\1+\2+%00+0x00+\3
+LOADB:3:"R,R,SI3":L32   0x95+%10+\1+\2+\3
+LOADB:3:"R,R+SI3":L32   0x95+%10+\1+\2+\3
+LOADB:3:"R,[R+SI3]":L32 0x95+%10+\1+\2+\3
+LOADB:3:"R,R,LI3":L32   0x95+%11+\1+\2+\3
+LOADB:3:"R,R+LI3":L32   0x95+%11+\1+\2+\3
+LOADB:3:"R,[R+LI3]":L32 0x95+%11+\1+\2+\3
+#     Rs,Rn,Rd                   Rd Rs Rn
+STORE:3:"R,R,R":L32      0x96+%00+\3+\1+%00+0x00+\2
+STORE:3:"R+R,R":L32      0x96+%00+\3+\1+%00+0x00+\2
+STORE:3:"[R+R],R":L32    0x96+%00+\3+\1+%00+0x00+\2
+STORE:3:"R,SI3,R":L32    0x96+%10+\3+\1+\2
+STORE:3:"R+SI3,R":L32    0x96+%10+\3+\1+\2
+STORE:3:"[R+SI3],R":L32  0x96+%10+\3+\1+\2
+STORE:3:"R,LI3,R":L32    0x96+%11+\3+\1+\2
+STORE:3:"R+LI3,R":L32    0x96+%11+\3+\1+\2
+STORE:3:"[R+LI3],R":L32  0x96+%11+\3+\1+\2
+#
+STOREW:3:"R,R,R":L32      0x97+%00+\3+\1+%00+0x00+\2
+STOREW:3:"R+R,R":L32      0x97+%00+\3+\1+%00+0x00+\2
+STOREW:3:"[R+R],R":L32    0x97+%00+\3+\1+%00+0x00+\2
+STOREW:3:"R,SI3,R":L32    0x97+%10+\3+\1+\2
+STOREW:3:"R+SI3,R":L32    0x97+%10+\3+\1+\2
+STOREW:3:"[R+SI3],R":L32  0x97+%10+\3+\1+\2
+STOREW:3:"R,LI3,R":L32    0x97+%11+\3+\1+\2
+STOREW:3:"R+LI3,R":L32    0x97+%11+\3+\1+\2
+STOREW:3:"[R+LI3],R":L32  0x97+%11+\3+\1+\2
+
+STOREB:3:"R,R,R":L32      0x98+%00+\3+\1+%00+0x00+\2
+STOREB:3:"R+R,R":L32      0x98+%00+\3+\1+%00+0x00+\2
+STOREB:3:"[R+R],R":L32    0x98+%00+\3+\1+%00+0x00+\2
+STOREB:3:"R,SI3,R":L32    0x98+%10+\3+\1+\2
+STOREB:3:"R+SI3,R":L32    0x98+%10+\3+\1+\2
+STOREB:3:"[R+SI3],R":L32  0x98+%10+\3+\1+\2
+STOREB:3:"R,LI3,R":L32    0x98+%11+\3+\1+\2
+STOREB:3:"R+LI3,R":L32    0x98+%11+\3+\1+\2
+STOREB:3:"[R+LI3],R":L32  0x98+%11+\3+\1+\2
 #
 # -- P2 instructions ---------------------------------------------------------
-#     Rd,Rn                             Rn Rd
-MOV:2:"R,R":L32             0x40+0x0000+\2+\1
-MOV:2:"R,IN2":L32           0x40+%1+\2+\1
-SWP:2:"R,R":L32             0x41+0x0000+\2+\1
-NOT:2:"R,R":L32             0x42+0x0000+\2+\1
-NOT:2:"R,IN2":L32           0x42+%1+\2+\1
+MOV:2:"R,R":L32        0x40+%00+\1+%00+0x000+\2
+MOV:2:"R,SI2":L32      0x40+%10+\1+\2
+MOV:2:"R,LI2":L32      0x40+%11+\1+\2
+SWP:2:"R,R":L32        0x41+%00+\1+%00+0x000+\2
+NOT:2:"R,R":L32        0x42+%00+\1+%00+0x000+\2
+NOT:2:"R,SI2":L32      0x42+%10+\1+\2
+NOT:2:"R,LI2":L32      0x42+%11+\1+\2
 #
-SIGXB:2:"R,R":L32           0x43+0x0000+\2+\1
-SIGXB:2:"R,IN2":L32         0x43+%1+\2+\1
-SIGXW:2:"R,R":L32           0x44+0x0000+\2+\1
-SIGXW:2:"R,IN2":L32         0x44+%1+\2+\1
-#     Rd,Rn                             Rn Rd
-LOAD:2:"R,R":L32            0x45+0x0000+\2+\1
-LOAD:2:"R,IN2":L32          0x45+%1+\2+\1
-LOADW:2:"R,R":L32           0x46+0x0000+\2+\1
-LOADW:2:"R,IN2":L32         0x46+%1+\2+\1
-LOADB:2:"R,R":L32           0x47+0x0000+\2+\1
-LOADB:2:"R,IN2":L32         0x47+%1+\2+\1
-#     Rn,Rd                             Rn Rd
-STORE:2:"R,R":L32           0x48+0x0000+\1+\2
-STORE:2:"IN2,R":L32         0x48+%1+\1+\2
-STOREW:2:"R,R":L32          0x49+0x0000+\1+\2
-STOREW:2:"IN2,R":L32        0x49+%1+\1+\2
-STOREB:2:"R,R":L32          0x4A+0x0000+\1+\2
-STOREB:2:"IN2,R":L32        0x4A+%1+\1+\2
-#     Rd,Rn                             Rn Rd
-IFEQ:2:"R,R":L32            0x4B+0x0000+\2+\1
-IFEQ:2:"R,IN2":L32          0x4B+%1+\2+\1
-IFNEQ:2:"R,R":L32           0x4C+0x0000+\2+\1
-IFNEQ:2:"R,IN2":L32         0x4C+%1+\2+\1
+SIGXB:2:"R,R":L32      0x43+%00+\1+%00+0x000+\2
+SIGXB:2:"R,SI2":L32    0x43+%10+\1+\2
+SIGXB:2:"R,LI2":L32    0x43+%11+\1+\2
+SIGXW:2:"R,R":L32      0x44+%00+\1+%00+0x000+\2
+SIGXW:2:"R,SI2":L32    0x44+%10+\1+\2
+SIGXW:2:"R,LI2":L32    0x44+%11+\1+\2
+#     Rd,Rn
+LOAD:2:"R,R":L32       0x45+%00+\1+%00+0x000+\2
+LOAD:2:"R,[R]":L32     0x45+%00+\1+%00+0x000+\2
+LOAD:2:"R,SI2":L32     0x45+%10+\1+\2
+LOAD:2:"R,[SI2]":L32   0x45+%10+\1+\2
+LOAD:2:"R,LI2":L32     0x45+%11+\1+\2
+LOAD:2:"R,[LI2]":L32   0x45+%11+\1+\2
+LOADW:2:"R,R":L32      0x46+%00+\1+%00+0x000+\2
+LOADW:2:"R,[R]":L32    0x46+%00+\1+%00+0x000+\2
+LOADW:2:"R,SI2":L32    0x46+%10+\1+\2
+LOADW:2:"R,[SI2]":L32  0x46+%10+\1+\2
+LOADW:2:"R,LI2":L32    0x46+%11+\1+\2
+LOADW:2:"R,[LI2]":L32  0x46+%11+\1+\2
+LOADB:2:"R,R":L32      0x47+%00+\1+%00+0x000+\2
+LOADB:2:"R,[R]":L32    0x47+%00+\1+%00+0x000+\2
+LOADB:2:"R,SI2":L32    0x47+%10+\1+\2
+LOADB:2:"R,[SI2]":L32  0x47+%10+\1+\2
+LOADB:2:"R,LI2":L32    0x47+%11+\1+\2
+LOADB:2:"R,[LI2]":L32  0x47+%11+\1+\2
+#     Rn,Rd
+STORE:2:"R,R":L32      0x48+%00+\2+%00+0x000+\1
+STORE:2:"[R],R":L32    0x48+%00+\2+%00+0x000+\1
+STORE:2:"SI2,R":L32    0x48+%10+\2+\1
+STORE:2:"[SI2],R":L32  0x48+%10+\2+\1
+STORE:2:"LI2,R":L32    0x48+%11+\2+\1
+STORE:2:"[LI2],R":L32  0x48+%11+\2+\1
+STOREW:2:"R,R":L32     0x49+%00+\2+%00+0x000+\1
+STOREW:2:"[R],R":L32   0x49+%00+\2+%00+0x000+\1
+STOREW:2:"SI2,R":L32   0x49+%10+\2+\1
+STOREW:2:"[SI2],R":L32 0x49+%10+\2+\1
+STOREW:2:"LI2,R":L32   0x49+%11+\2+\1
+STOREW:2:"[LI2],R":L32 0x49+%11+\2+\1
+STOREB:2:"R,R":L32     0x4A+%00+\2+%00+0x000+\1
+STOREB:2:"[R],R":L32   0x4A+%00+\2+%00+0x000+\1
+STOREB:2:"SI2,R":L32   0x4A+%10+\2+\1
+STOREB:2:"[SI2],R":L32 0x4A+%10+\2+\1
+STOREB:2:"LI2,R":L32   0x4A+%11+\2+\1
+STOREB:2:"[LI2],R":L32 0x4A+%11+\2+\1
+#     Rd,Rn
+IFEQ:2:"R,R":L32       0x4B+%00+\1+%00+0x000+\2
+IFEQ:2:"R,SI2":L32     0x4B+%10+\1+\2
+IFEQ:2:"R,LI2":L32     0x4B+%11+\1+\2
+IFNEQ:2:"R,R":L32      0x4C+%00+\1+%00+0x000+\2
+IFNEQ:2:"R,SI2":L32    0x4C+%10+\1+\2
+IFNEQ:2:"R,LI2":L32    0x4C+%11+\1+\2
 #
-IFL:2:"R,R":L32             0x4D+0x0000+\2+\1
-IFL:2:"R,IN2":L32           0x4D+%1+\2+\1
-IFSL:2:"R,R":L32            0x4E+0x0000+\2+\1
-IFSL:2:"R,IN2":L32          0x4E+%1+\2+\1
-IFLE:2:"R,R":L32            0x4F+0x0000+\2+\1
-IFLE:2:"R,IN2":L32          0x4F+%1+\2+\1
-IFSLE:2:"R,R":L32           0x50+0x0000+\2+\1
-IFSLE:2:"R,IN2":L32         0x50+%1+\2+\1
+IFL:2:"R,R":L32        0x4D+%00+\1+%00+0x000+\2
+IFL:2:"R,SI2":L32      0x4D+%10+\1+\2
+IFL:2:"R,LI2":L32      0x4D+%11+\1+\2
+IFSL:2:"R,R":L32       0x4E+%00+\1+%00+0x000+\2
+IFSL:2:"R,SI2":L32     0x4E+%10+\1+\2
+IFSL:2:"R,LI2":L32     0x4E+%11+\1+\2
+IFLE:2:"R,R":L32       0x4F+%00+\1+%00+0x000+\2
+IFLE:2:"R,SI2":L32     0x4F+%10+\1+\2
+IFLE:2:"R,LI2":L32     0x4F+%11+\1+\2
+IFSLE:2:"R,R":L32      0x50+%00+\1+%00+0x000+\2
+IFSLE:2:"R,SI2":L32    0x50+%10+\1+\2
+IFSLE:2:"R,LI2":L32    0x50+%11+\1+\2
 #
-IFBITS:2:"R,R":L32          0x51+0x0000+\2+\1
-IFBITS:2:"R,IN2":L32        0x51+%1+\2+\1
-IFCLEAR:2:"R,R":L32         0x52+0x0000+\2+\1
-IFCLEAR:2:"R,IN2":L32       0x52+%1+\2+\1
+IFBITS:2:"R,R":L32     0x51+%00+\1+%00+0x000+\2
+IFBITS:2:"R,SI2":L32   0x51+%10+\1+\2
+IFBITS:2:"R,LI2":L32   0x51+%11+\1+\2
+IFCLEAR:2:"R,R":L32    0x52+%00+\1+%00+0x000+\2
+IFCLEAR:2:"R,SI2":L32  0x52+%10+\1+\2
+IFCLEAR:2:"R,LI2":L32  0x52+%11+\1+\2
 #
-JMP:2:"R,R":L32             0x53+0x0000+\2+\1
-JMP:2:"R,IN2":L32           0x53+%1+\2+\1
-CALL:2:"R,R":L32            0x54+0x0000+\2+\1
-CALL:2:"R,IN2":L32          0x54+%1+\2+\1
+JMP:2:"R,R":L32        0x53+%00+\1+%00+0x000+\2
+JMP:2:"R,SJ2":L32      0x53+%10+\1+\2
+JMP:2:"R,LJ2":L32      0x53+%11+\1+\2
+CALL:2:"R,R":L32       0x54+%00+\1+%00+0x000+\2
+CALL:2:"R,SJ2":L32     0x54+%10+\1+\2
+CALL:2:"R,LJ2":L32     0x54+%11+\1+\2
 #
 # -- P1 instructions ---------------------------------------------------------
-#        Rn                              Rn
-XCHGB:1:"R":L32             0x20+0x00000+\1
-XCHGW:1:"R":L32             0x21+0x00000+\1
+XCHGB:1:"R":L32        0x20+0x00000+\1
+XCHGW:1:"R":L32        0x21+0x00000+\1
 #
-GETPC:1:"R":L32             0x22+0x00000+\1
+GETPC:1:"R":L32        0x22+0x00000+\1
 #
-POP:1:"R":L32               0x23+0x00000+\1
-PUSH:1:"R":L32              0x24+0x00000+\1
+POP:1:"R":L32          0x23+0x00000+\1
+PUSH:1:"R":L32         0x24+0x00000+\1
 #
-JMP:1:"R":L32               0x25+0x00000+\1
-JMP:1:"IN1":L32             0x25+%1+\1
-CALL:1:"R":L32              0x26+0x00000+\1
-CALL:1:"IN1":L32            0x26+%1+\1
-RJMP:1,r:"R":L32              0x27+0x00000+\1
-RJMP:1,r:"IN1":L32            0x27+%1+\1
-RCALL:1,r:"R":L32             0x28+0x00000+\1
-RCALL:1,r:"IN1":L32           0x28+%1+\1
+JMP:1:"R":L32          0x25+0x00000+\1
+JMP:1:"JN1":L32        0x25+%1+\1
+CALL:1:"R":L32         0x26+0x00000+\1
+CALL:1:"JN1":L32       0x26+%1+\1
+RJMP:1,r:"R":L32       0x27+0x00000+\1
+RJMP:1,r:"JN1":L32     0x27+%1+\1
+RCALL:1,r:"R":L32      0x28+0x00000+\1
+RCALL:1,r:"JN1":L32    0x28+%1+\1
 #
-INT:1:"R":L32               0x29+0x00000+\1
-INT:1:"IN1":L32             0x29+%1+\1
+INT:1:"R":L32          0x29+0x00000+\1
+INT:1:"IN1":L32        0x29+%10+\1
 #
 # -- NP instructions ---------------------------------------------------------
-SLEEP:0::L32                0x00+0x000000
-RET:0::L32                  0x01+0x000000
-RFI:0::L32                  0x02+0x000000
+SLEEP:0::L32 0x00+0x000000
+RET:0::L32   0x01+0x000000
+RFI:0::L32   0x02+0x000000
 </OPCODE>
 
