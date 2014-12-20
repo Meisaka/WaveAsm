@@ -30,7 +30,7 @@ If the output does not have "complete!" at the end, check for errors, getting th
 Supported Macros
 ----
 Built-in macros and instructions are *not* case sensitive.
-WaveAsm currently supports 6 macros:
+WaveAsm supported macros:
  - .ORG - setting where the code is generated for.
  - .EQU - Set the label on the line to whatever value is supplied.
  - .DATA - Encode values into minimally sized memory words in the endianess of the CPU
@@ -38,6 +38,8 @@ WaveAsm currently supports 6 macros:
  - .DB - Same as .DATA currently
  - .DW - Similar to .DATA, except encode each value as a 16 bit Word
  - .DD - Similar to .DATA, except encode each value as a 32 bit Doubleword
+ - .RESERVE - allocate a number of bytes
+ - .FILL - with 1 argument is just like reserve. When used with 2 arguments: first is byte count, second is a value to fill the bytes with.
 
 Note:
 .ORG generates code to run a at specified address, but the default output format is flat and does not support this, so a relocator or specific base load address will be needed.

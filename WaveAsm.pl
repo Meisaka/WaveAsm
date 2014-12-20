@@ -41,6 +41,8 @@ my %optable = (
 my @macrotable = (
 	{op => '.ORG', arc => 1, arf => '*', encode => 'M'},
 	{op => '.EQU', arc => 1, arf => '*', encode => 'M'},
+	{op => '.RESERVE', arc => 1, arf => '*', encode => 'M'},
+	{op => '.FILL', arc => 1, arf => '*', encode => 'M'},
 	{op => '.DAT', arc => -1, arf => '*', encode => 'M'},
 	{op => '.DATA', arc => -1, arf => '*', encode => 'M'},
 	{op => '.DB', arc => -1, arf => '*', encode => 'M'},
@@ -48,7 +50,7 @@ my @macrotable = (
 	{op => '.DD', arc => -1, arf => '*', encode => 'M'}
 );
 
-print STDERR "Wave Asm - version 0.5.1\n";
+print STDERR "Wave Asm - version 0.5.2\n";
 foreach(@ARGV) {
 	if(/^--(.*)/) {
 		my $flags = $1;
@@ -1196,6 +1198,39 @@ sub FullParse {
 			} elsif($macro eq '.EQU') {
 				if(@values > 0) {
 					$labelcv = $values[0];
+				}
+			} elsif($macro eq '.RESERVE') {
+				if(@values > 0) {
+					$l->{addr} = $vpc;
+					$vpc += $values[0];
+				}
+			} elsif($macro eq '.FILL') {
+				if(@values == 1) {
+					$l->{addr} = $vpc;
+					$vpc += $values[0];
+				} elsif(@values == 2) {
+					my @lencode;
+					$l->{addr} = $vpc;
+					my $el = $values[0];
+					my $x = $values[1];
+					if(ref($x) eq 'HASH') {
+						my $sv = $x->{encode};
+						push @lencode, $sv;
+					} else {
+						push @lencode, "+ALM+$x";
+					}
+					my ($avl, $dat, @bytes) = BinSplit(RunEncoder(join(' ', @lencode)));
+					my $dtl = length($dat);
+					if($dtl < $el) {
+						use integer;
+						my ($nel, $nrl) = ($el / $dtl, $el % $dtl);
+						$l->{dat} = ($dat x $nel) . substr($dat, 0, $nrl);
+					} elsif($dtl == $el) {
+						$l->{dat} = $dat;
+					} else { # $dtl > $el
+						$l->{dat} = substr($dat, 0, $el);
+					}
+					$vpc += $el;
 				}
 			} elsif($macro =~ /\.D(AT|ATA|[BDW])/) {
 				my @lencode;
