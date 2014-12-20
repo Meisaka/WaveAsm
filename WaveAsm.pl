@@ -2,7 +2,9 @@
 # Multiwave Assembler
 #
 use strict;
+use File::Basename;
 my $instructionsetfile = "tr3200.isf";
+my $systempath = dirname(__FILE__);
 
 my %langtable = ( fileof1 => "Failed to open file: ", fileof2 => "",
 	error => "Error", line => "Line",
@@ -46,7 +48,7 @@ my @macrotable = (
 	{op => '.DD', arc => -1, arf => '*', encode => 'M'}
 );
 
-print STDERR "Wave Asm - version 0.5.0\n";
+print STDERR "Wave Asm - version 0.5.1\n";
 foreach(@ARGV) {
 	if(/^--(.*)/) {
 		my $flags = $1;
@@ -77,7 +79,7 @@ foreach(@ARGV) {
 }
 
 # load ISF
-LoadInstructions( $instructionsetfile );
+LoadInstructions( $systempath  . '/' . $instructionsetfile );
 print STDERR "<optable>\n" if($verbose > 2);
 foreach my $o (keys %optable) {
 	print STDERR $o . ":" . @{$optable{$o}} . " " if($verbose > 2);
@@ -1399,7 +1401,7 @@ sub WriteFlat {
 				print STDERR "Wrote $align null bytes\n" if($verbose > 2);
 				$vpi += $align;
 			} else {
-				print STDERR "Address break in binary flat file ", sprintf("%08x to %08x",$vpi, $l->{addr}), "\nLine: $l->{lnum}\n" if($verbose > 0);
+				print STDERR "Address break in binary flat file ", sprintf("%08x to %08x, %d bytes",$vpi, $l->{addr}, $l->{addr} - $vpi), "\nLine: $l->{lnum}\n" if($verbose > 0);
 				$vpi = $l->{addr};
 			}
 		}
