@@ -1,5 +1,5 @@
 /****
- * WaveAsm wavefunc.c - platform interface functions
+ * WaveAsm lexer.c - The Lexer
  * Copyright (c) 2013-2015, Meisaka Yukara <Meisaka.Yukara at gmail dot com>
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -14,20 +14,21 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#include "wave.h"
 #include "wavefunc.h"
 
-void * wva_alloc(size_t s)
-{
-	return malloc(s);
-}
+#include <stdio.h>
 
-void * wva_realloc(void *p, size_t s)
-{
-	return realloc(p, s);
-}
+#define MAKETOKEN(a) fprintf(stderr, "Tkn-" #a)
 
-void wva_free(void *p)
-{
-	free(p);
+void wva_lex(void * wvas, char * text, size_t len) {
+	size_t i;
+	while(i <= len) {
+		i++;
+		if(i > len) {
+			MAKETOKEN(EOL);
+			break;
+		}
+	}
 }
 
