@@ -19,6 +19,11 @@ struct wvas_state {
 	void *lc_state;
 } *wvat_state;
 
+typedef
+struct wvas_obj {
+	size_t len;
+} *wvat_obj;
+
 int wva_allocstate(wvat_state *);
 int wva_freestate(wvat_state);
 
