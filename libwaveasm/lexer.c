@@ -19,6 +19,9 @@
 
 #include <stdio.h>
 
+//#define LEXDEBUG(a) a
+#define LEXDEBUG(a)
+
 #define MAKETOKEN(a) fprintf(stderr, "Tkn-" #a)
 
 #define TKWS 1
@@ -54,6 +57,7 @@
 #define TKRBRK 31
 #define TKLBRC 32
 #define TKRBRC 33
+#define TKBSL 34
 
 // these tables determine which mode to switch to based on charactor input.
 static int sttab[][256] = {
@@ -64,7 +68,7 @@ static int sttab[][256] = {
 	TKLP,TKRP,TKSTAR,TKPLUS,TKCMA,TKMINUS,TKDOT,TKFSL,
 	26,4,4,4,4,4,4,4,4,4,TKCOL,TKCOMMENT,TKLT,TKEQ,TKGT,0,
 	33,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
-	3,3,3,3,3,3,3,3,3,3,3,37,0,38,0,3,
+	3,3,3,3,3,3,3,3,3,3,3,37,44,38,0,3,
 	0,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
 	3,3,3,3,3,3,3,3,3,3,3,39,0,40,0,0,
 },
@@ -86,7 +90,7 @@ static int sttab[][256] = {
 	TKLP,TKRP,TKSTAR,TKPLUS,TKCMA,TKMINUS,28,TKFSL,
 	28,28,28,28,28,28,28,28,28,28,29,TKCOMMENT,TKLT,TKEQ,TKGT,0,
 	33,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,
-	28,28,28,28,28,28,28,28,28,28,28,37,0,38,0,28,
+	28,28,28,28,28,28,28,28,28,28,28,37,44,38,0,28,
 	0,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,
 	28,28,28,28,28,28,28,28,28,28,28,39,0,40,0,0,
 },
@@ -97,7 +101,7 @@ static int sttab[][256] = {
 	TKLP,TKRP,TKSTAR,TKPLUS,TKCMA,TKMINUS,TKDOT,TKFSL,
 	30,30,30,30,30,30,30,30,30,30,TKCOL,TKCOMMENT,TKLT,TKEQ,TKGT,0,
 	33,30,30,30,30,30,30,0,0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,0,0,0,37,0,38,0,0,
+	0,0,0,0,0,0,0,0,0,0,0,37,44,38,0,0,
 	0,30,30,30,30,30,30,0,0,0,0,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,0,0,0,39,0,40,0,0,
 },
@@ -228,6 +232,7 @@ static struct lex_ctl wvtr[] = {
 	{41, 6, 0, -2},
 	{42, 0, TKSQ, -2},
 	{41, 7, 0, -2}, // sq escape
+	{0, 0, TKBSL},
 };
 
 static void diag_color(const char * txt, size_t s, size_t e) {
@@ -285,7 +290,7 @@ int wva_lex(void * wvas, char * text, size_t len) {
 							if(mtkn != ntkn) tbegin = i;
 							mtkn = ntkn;
 						}
-						fprintf(stderr, "[%d]%c", nmo, cc);
+						LEXDEBUG(fprintf(stderr, "[%d]%c", nmo, cc);)
 						mo = nmo;
 					} else {
 						if(mtkn && (nxtkn == 0) && ntkn) {
@@ -295,7 +300,7 @@ int wva_lex(void * wvas, char * text, size_t len) {
 							tbegin = i;
 							mtkn = ntkn;
 						}
-						fputc(cc, stderr);
+						LEXDEBUG(fputc(cc, stderr);)
 					}
 				} else {
 					fprintf(stderr, "lex: Mode out of range\n");
