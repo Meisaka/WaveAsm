@@ -66,7 +66,7 @@ static int sttab[][256] = {
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 	TKWS,TKBANG,TKDQ,TKHASH,TKDS,TKPCS,TKAMP,TKSQ,
 	TKLP,TKRP,TKSTAR,TKPLUS,TKCMA,TKMINUS,TKDOT,TKFSL,
-	26,4,4,4,4,4,4,4,4,4,TKCOL,TKCOMMENT,TKLT,TKEQ,TKGT,0,
+	26,4,4,4,4,4,4,4,4,4,TKCOL,25,TKLT,TKEQ,TKGT,0,
 	33,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
 	3,3,3,3,3,3,3,3,3,3,3,37,44,38,0,3,
 	0,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
@@ -77,7 +77,7 @@ static int sttab[][256] = {
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 	TKWS,TKBANG,TKDQ,TKHASH,TKDS,TKPCS,TKAMP,TKSQ,
 	TKLP,TKRP,TKSTAR,TKPLUS,TKCMA,TKMINUS,TKDOT,TKFSL,
-	31,31,31,31,31,31,31,31,0,0,TKCOL,TKCOMMENT,TKLT,TKEQ,TKGT,0,
+	31,31,31,31,31,31,31,31,0,0,TKCOL,25,TKLT,TKEQ,TKGT,0,
 	33,0,32,0,0,0,0,0,0,0,0,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,27,0,0,0,0,0,0,0,
 	0,0,32,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -88,7 +88,7 @@ static int sttab[][256] = {
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 	TKWS,TKBANG,TKDQ,TKHASH,TKDS,TKPCS,TKAMP,TKSQ,
 	TKLP,TKRP,TKSTAR,TKPLUS,TKCMA,TKMINUS,28,TKFSL,
-	28,28,28,28,28,28,28,28,28,28,29,TKCOMMENT,TKLT,TKEQ,TKGT,0,
+	28,28,28,28,28,28,28,28,28,28,29,25,TKLT,TKEQ,TKGT,0,
 	33,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,
 	28,28,28,28,28,28,28,28,28,28,28,37,44,38,0,28,
 	0,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,
@@ -99,13 +99,13 @@ static int sttab[][256] = {
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 	TKWS,TKBANG,TKDQ,TKHASH,TKDS,TKPCS,TKAMP,TKSQ,
 	TKLP,TKRP,TKSTAR,TKPLUS,TKCMA,TKMINUS,TKDOT,TKFSL,
-	30,30,30,30,30,30,30,30,30,30,TKCOL,TKCOMMENT,TKLT,TKEQ,TKGT,0,
+	30,30,30,30,30,30,30,30,30,30,TKCOL,25,TKLT,TKEQ,TKGT,0,
 	33,30,30,30,30,30,30,0,0,0,0,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,0,0,0,37,44,38,0,0,
 	0,30,30,30,30,30,30,0,0,0,0,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,0,0,0,39,0,40,0,0,
 },
-{
+{ // 4
 	34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,
 	34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,
 	34,34,35,34,34,34,34,34,34,34,34,34,34,34,34,34,
@@ -141,7 +141,7 @@ static int sttab[][256] = {
 	34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,
 	34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,34,
 },
-{
+{ // 6
 	41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,
 	41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,
 	41,41,41,41,41,41,41,42,41,41,41,41,41,41,41,41,
@@ -176,6 +176,24 @@ static int sttab[][256] = {
 	41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,
 	41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,
 	41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,
+},
+{ // 8
+	25,25,25,25,25,25,25,25,25,25,24,25,25,24,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
+	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,
 }
 };
 
@@ -213,7 +231,7 @@ static struct lex_ctl wvtr[] = {
 	{0, 0, TKGT},
 	{0, 0, TKEQ},
 	{24, 0, TKEOL},
-	{25, 0, TKWS, -2}, // 25
+	{25, 8, TKWS, -2}, // 25
 	{26, 1, TKDEC, -2}, // 26 leading zero 0nn oct, 0xnn hex, 0bnn bin
 	{30, 3, 0, TKHEX},
 	{28, 2, 0, -2},
@@ -235,8 +253,23 @@ static struct lex_ctl wvtr[] = {
 	{0, 0, TKBSL},
 };
 
-static void diag_color(const char * txt, size_t s, size_t e) {
-	fprintf(stderr, "\e[31m");
+static void diag_color(const char * txt, size_t s, size_t e, int tk) {
+	int c;
+	int b = 0;
+	switch(tk) {
+	case 1: c = '4'; break;
+	case TKPCS: c = '2'; break;
+	case TKDEC:
+	case TKOCT:
+	case TKHEX:
+	case TKBIN: c = '5'; break;
+	case 19: c = '3'; break;
+	case TKSQ:
+	case TKDQ: c = '1'; break;
+	default: b = 1; c = '7'; break;
+	}
+	if(b) fprintf(stderr, "\e[1m");
+	fprintf(stderr, "\e[3%cm", c);
 	size_t x;
 	for(x = s; x < e; x++) {
 		fputc(txt[x], stderr);
@@ -246,74 +279,83 @@ static void diag_color(const char * txt, size_t s, size_t e) {
 
 int wva_lex(void * wvas, char * text, size_t len) {
 	size_t i = 0;
-	char cc = 0;
+	uint8_t cc = 0;
 	int mo = 0;
 	int lc = 0;
 	int mtkn = 0;
+	int lmtkn = 0;
 	int trsc;
+	int line = 1;
+	int col = 0;
+	int cif = 0;
 	size_t tbegin, tend;
 	const int psz = sizeof(wvtr) / sizeof(struct lex_ctl);
 	while(i <= len) {
-		cc = i == len ? 0 : text[i];
-		switch(mo) {
-		case TKCOMMENT:
-			if(cc == 10 || cc == 13) {
-				mo = 24;
-				fputc(10, stderr);
-				mtkn = TKEOL;
-			}
-			break;
-		default:
-			trsc = sttab[lc][cc];
-			if(!trsc) {
-				fprintf(stderr, "Invalid char: %d [%c]\n", cc, cc);
-				return 1;
+		cc = i == len ? 32 : (uint8_t)text[i];
+		if(col == 0) {
+			fprintf(stderr, "Line %d:", line);
+		}
+		trsc = sttab[lc][cc];
+		if(!trsc) {
+			fprintf(stderr, "Invalid char: %d [%c]\n", cc, cc);
+			return 1;
+		}
+		if(trsc >= psz) {
+			fprintf(stderr, "lex: Mode out of range\n");
+			return -1;
+		}
+		int nmo = wvtr[trsc].nmo;
+		lc = wvtr[trsc].nlc;
+		int nxtkn = wvtr[trsc].mtkn;
+		int ntkn = wvtr[trsc].tkn;
+		if(nxtkn > 0) {
+			mtkn = nxtkn;
+		} else if(nxtkn == -1) {
+			mtkn = 0;
+		}
+		if(nmo != mo) {
+			if(!ntkn && nxtkn > 0) {
 			} else {
-				if(trsc < psz) {
-					int nmo = wvtr[trsc].nmo;
-					lc = wvtr[trsc].nlc;
-					int nxtkn = wvtr[trsc].mtkn;
-					int ntkn = wvtr[trsc].tkn;
-					if(nxtkn > 0) {
-						mtkn = nxtkn;
-					} else if(nxtkn == -1) {
-						mtkn = 0;
-					}
-					if(nmo != mo) {
-						if(!ntkn && nxtkn > 0) {
-						} else {
-							if(mtkn && (nxtkn != -2 || mtkn != ntkn)) {
-								fprintf(stderr, "{%d}", mtkn);
-								tend = i;
-								diag_color(text, tbegin, tend);
-							}
-							if(mtkn != ntkn) tbegin = i;
-							mtkn = ntkn;
-						}
-						LEXDEBUG(fprintf(stderr, "[%d]%c", nmo, cc);)
-						mo = nmo;
-					} else {
-						if(mtkn && (nxtkn == 0) && ntkn) {
-							fprintf(stderr, "{|%d}", mtkn);
-							tend = i;
-							diag_color(text, tbegin, tend);
-							tbegin = i;
-							mtkn = ntkn;
-						}
-						LEXDEBUG(fputc(cc, stderr);)
-					}
-				} else {
-					fprintf(stderr, "lex: Mode out of range\n");
-					return -1;
+				if(mtkn && (nxtkn != -2 || mtkn != ntkn)) {
+					fprintf(stderr, "{%d}", mtkn);
+					lmtkn = mtkn;
+					tend = i;
+					diag_color(text, tbegin, tend, mtkn);
+					if(mtkn != 1) cif = 1;
+					if(mtkn == 24) cif = 0;
 				}
+				if(mtkn != ntkn) tbegin = i;
+				mtkn = ntkn;
 			}
-			break;
+			LEXDEBUG(fprintf(stderr, "[%d]%c", nmo, cc);)
+			mo = nmo;
+		} else {
+			if(mtkn && (nxtkn == 0) && ntkn) {
+				fprintf(stderr, "{|%d}", mtkn);
+				tend = i;
+				lmtkn = mtkn;
+				diag_color(text, tbegin, tend, mtkn);
+				tbegin = i;
+				mtkn = ntkn;
+				if(mtkn != 1) cif = 1;
+				if(mtkn == 24) cif = 0;
+			}
+			LEXDEBUG(fputc(cc, stderr);)
 		}
+		if(!cif && cc == '#') { // # at beginning of lines as comments
+			mo = 25;
+			trsc = 25;
+			mtkn = 1;
+			lc = wvtr[trsc].nlc;
+		}
+		col++;
+		if(lmtkn == 24) {
+			line ++;
+			col = 0;
+			cif = 0;
+		}
+		lmtkn = 0;
 		i++;
-		if(i >= len) {
-			MAKETOKEN(EOL);
-			break;
-		}
 	}
 	return 0;
 }
