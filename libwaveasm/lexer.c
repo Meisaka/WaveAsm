@@ -62,9 +62,9 @@
 // these tables determine which mode to switch to based on charactor input.
 static int sttab[][256] = {
 {
-	0,0,0,0,0,0,0,0,0,0,TKEOL,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,1,TKEOL,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	TKWS,TKBANG,TKDQ,TKHASH,TKDS,TKPCS,TKAMP,TKSQ,
+	1,TKBANG,TKDQ,TKHASH,TKDS,TKPCS,TKAMP,TKSQ,
 	TKLP,TKRP,TKSTAR,TKPLUS,TKCMA,TKMINUS,TKDOT,TKFSL,
 	26,4,4,4,4,4,4,4,4,4,TKCOL,25,TKLT,TKEQ,TKGT,0,
 	33,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
@@ -73,20 +73,20 @@ static int sttab[][256] = {
 	3,3,3,3,3,3,3,3,3,3,3,39,0,40,0,0,
 },
 {
-	0,0,0,0,0,0,0,0,0,0,TKEOL,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,1,TKEOL,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	TKWS,TKBANG,TKDQ,TKHASH,TKDS,TKPCS,TKAMP,TKSQ,
+	1,TKBANG,TKDQ,TKHASH,TKDS,TKPCS,TKAMP,TKSQ,
 	TKLP,TKRP,TKSTAR,TKPLUS,TKCMA,TKMINUS,TKDOT,TKFSL,
 	31,31,31,31,31,31,31,31,0,0,TKCOL,25,TKLT,TKEQ,TKGT,0,
 	33,0,32,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,27,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,27,0,0,37,44,38,0,0,
 	0,0,32,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,27,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,27,0,0,39,0,40,0,0,
 },
 {
-	0,0,0,0,0,0,0,0,0,0,TKEOL,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,1,TKEOL,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	TKWS,TKBANG,TKDQ,TKHASH,TKDS,TKPCS,TKAMP,TKSQ,
+	1,TKBANG,TKDQ,TKHASH,TKDS,TKPCS,TKAMP,TKSQ,
 	TKLP,TKRP,TKSTAR,TKPLUS,TKCMA,TKMINUS,28,TKFSL,
 	28,28,28,28,28,28,28,28,28,28,29,25,TKLT,TKEQ,TKGT,0,
 	33,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,
@@ -95,9 +95,9 @@ static int sttab[][256] = {
 	28,28,28,28,28,28,28,28,28,28,28,39,0,40,0,0,
 },
 {
-	0,0,0,0,0,0,0,0,0,0,TKEOL,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,1,TKEOL,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	TKWS,TKBANG,TKDQ,TKHASH,TKDS,TKPCS,TKAMP,TKSQ,
+	1,TKBANG,TKDQ,TKHASH,TKDS,TKPCS,TKAMP,TKSQ,
 	TKLP,TKRP,TKSTAR,TKPLUS,TKCMA,TKMINUS,TKDOT,TKFSL,
 	30,30,30,30,30,30,30,30,30,30,TKCOL,25,TKLT,TKEQ,TKGT,0,
 	33,30,30,30,30,30,30,0,0,0,0,0,0,0,0,0,
@@ -232,7 +232,7 @@ static struct lex_ctl wvtr[] = {
 	{0, 0, TKEQ},
 	{24, 0, TKEOL},
 	{25, 8, TKWS, -2}, // 25
-	{26, 1, TKDEC, -2}, // 26 leading zero 0nn oct, 0xnn hex, 0bnn bin
+	{26, 1, TKDEC, -2}, // 26 leading zero ; 0nn oct, 0xnn hex, 0bnn bin
 	{30, 3, 0, TKHEX},
 	{28, 2, 0, -2},
 	{28, 2, 0, TKCOL},
@@ -254,22 +254,27 @@ static struct lex_ctl wvtr[] = {
 };
 
 static void diag_color(const char * txt, size_t s, size_t e, int tk) {
-	int c;
+	int c = 0;
 	int b = 0;
 	switch(tk) {
 	case 1: c = '4'; break;
+	case 3:
+		fprintf(stderr, "H$%08x ", wva_murmur3(txt+s,e-s));
+		break;
 	case TKPCS: c = '2'; break;
 	case TKDEC:
 	case TKOCT:
 	case TKHEX:
 	case TKBIN: c = '5'; break;
-	case 19: c = '3'; break;
+	case 19: c = '3';
+		 fprintf(stderr, "H$%08x ", wva_murmur3(txt+s,e-s));
+		 break;
 	case TKSQ:
 	case TKDQ: c = '1'; break;
 	default: b = 1; c = '7'; break;
 	}
 	if(b) fprintf(stderr, "\e[1m");
-	fprintf(stderr, "\e[3%cm", c);
+	if(c) fprintf(stderr, "\e[3%cm", c);
 	size_t x;
 	for(x = s; x < e; x++) {
 		fputc(txt[x], stderr);
@@ -297,7 +302,7 @@ int wva_lex(void * wvas, char * text, size_t len) {
 		}
 		trsc = sttab[lc][cc];
 		if(!trsc) {
-			fprintf(stderr, "Invalid char: %d [%c]\n", cc, cc);
+			fprintf(stderr, "\nInvalid char: %d [%c]\nmo=%d, lc=%d\n", cc, cc, mo, lc);
 			return 1;
 		}
 		if(trsc >= psz) {
