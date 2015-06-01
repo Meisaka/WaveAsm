@@ -84,7 +84,7 @@ foreach(@ARGV) {
 my $isfbase = $systempath;
 my $ret = LoadInstructions( $isfbase  . '/' . $instructionsetfile );
 if($ret < 0) { # Error trying to load the file. Try with other paths
-	if($^O ne 'MSWin32') {
+	if($^O ne 'MSWin32' && $^O ne 'msys') {
 		$isfbase = "/usr/local/share/WaveAsm";
 		$ret = LoadInstructions( $isfbase  . '/' . $instructionsetfile );
 		if($ret == 0) {
