@@ -81,7 +81,26 @@ foreach(@ARGV) {
 }
 
 # load ISF
-LoadInstructions( $systempath  . '/' . $instructionsetfile );
+my $isfbase = $systempath;
+my $ret = LoadInstructions( $isfbase  . '/' . $instructionsetfile );
+if($ret < 0) { # Error trying to load the file. Try with other paths
+	if($^O ne 'MSWin32') {
+		$isfbase = "/usr/local/share/WaveAsm";
+		$ret = LoadInstructions( $isfbase  . '/' . $instructionsetfile );
+		if($ret == 0) {
+			$isfbase = "/usr/share/WaveAsm";
+			$ret = LoadInstructions( $isfbase  . '/' . $instructionsetfile );
+			if($ret == 0) {
+				print STDERR $langtable{fileof1} . $instructionsetfile . $langtable{fileof2} . "\n";
+				exit 1;
+			}
+		}
+	} else {
+		# Default instalation path on Windows ?
+		print STDERR $langtable{fileof1} . $instructionsetfile . $langtable{fileof2} . "\n";
+		exit 1;
+	}
+}
 print STDERR "<optable>\n" if($verbose > 2);
 foreach my $o (keys %optable) {
 	print STDERR $o . ":" . @{$optable{$o}} . " " if($verbose > 2);
@@ -107,8 +126,7 @@ exit;
 sub LoadInstructions {
 	my($file) = @_;
 	unless( open(ISF, "<", $file) ) {
-		print STDERR $langtable{fileof1} . $file . $langtable{fileof2} . "\n";
-		exit 1;
+		return -1;
 	}
 	my (%att, @attribs, @creg, @mcr);
 	while( <ISF> ) {
@@ -230,6 +248,7 @@ sub LoadInstructions {
 		}
 	}
 	close ISF;
+  return 0;
 }
 
 sub DecodeValue {
