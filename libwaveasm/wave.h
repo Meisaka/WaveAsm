@@ -24,13 +24,20 @@ struct wvas_obj {
 	size_t len;
 } *wvat_obj;
 
+/* create and destroy WaveAsm instances */
 int wva_allocstate(wvat_state *);
 int wva_freestate(wvat_state);
 
+/* load ISF from text data */
 int wva_loadisf(wvat_state, char *, size_t);
+
+/* load ISF from compiled data */
 int wva_loadisfc(wvat_state, uint8_t *, size_t);
 
+/* assemble object text */
 int wva_assemble(wvat_state, wvat_obj *, char *, size_t);
+
+/* free object data used by WaveAsm */
 int wva_objfree(wvat_obj);
 
 #endif

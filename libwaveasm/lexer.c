@@ -282,6 +282,26 @@ static void diag_color(const char * txt, size_t s, size_t e, int tk) {
 	fprintf(stderr, "\e[0m");
 }
 
+static void lex_add_token(void * state, const char * text, size_t s, size_t e, int tk) {
+	if(tk == 19) {
+		if(text[s] == ':') {
+			s++;
+		} else if(text[e-1] == ':') {
+			e--;
+		}
+	}
+	if(s > e) {
+		fprintf(stderr, "Index out of bounds s=%d, e=%d\n",s,e);
+	}
+	char * mmm;
+	size_t x;
+	mmm = wva_alloc(e-s);
+	for(x = 0; x < e-s; x++) {
+		mmm[x] = tolower(text[s+x]);
+	}
+	diag_color(mmm,0,e-s,tk);
+}
+
 int wva_lex(void * wvas, char * text, size_t len) {
 	size_t i = 0;
 	uint8_t cc = 0;
@@ -294,6 +314,8 @@ int wva_lex(void * wvas, char * text, size_t len) {
 	int col = 0;
 	int cif = 0;
 	size_t tbegin, tend;
+	tbegin = 0;
+	tend = 0;
 	const int psz = sizeof(wvtr) / sizeof(struct lex_ctl);
 	while(i <= len) {
 		cc = i == len ? 32 : (uint8_t)text[i];
@@ -322,10 +344,10 @@ int wva_lex(void * wvas, char * text, size_t len) {
 			if(!ntkn && nxtkn > 0) {
 			} else {
 				if(mtkn && (nxtkn != -2 || mtkn != ntkn)) {
-					fprintf(stderr, "{%d}", mtkn);
+					LEXDEBUG(fprintf(stderr, "{%d}", mtkn);)
 					lmtkn = mtkn;
 					tend = i;
-					diag_color(text, tbegin, tend, mtkn);
+					lex_add_token(wvas, text, tbegin, tend, mtkn);
 					if(mtkn != 1) cif = 1;
 					if(mtkn == 24) cif = 0;
 				}
@@ -336,10 +358,10 @@ int wva_lex(void * wvas, char * text, size_t len) {
 			mo = nmo;
 		} else {
 			if(mtkn && (nxtkn == 0) && ntkn) {
-				fprintf(stderr, "{|%d}", mtkn);
+				LEXDEBUG(fprintf(stderr, "{|%d}", mtkn);)
 				tend = i;
 				lmtkn = mtkn;
-				diag_color(text, tbegin, tend, mtkn);
+				lex_add_token(wvas, text, tbegin, tend, mtkn);
 				tbegin = i;
 				mtkn = ntkn;
 				if(mtkn != 1) cif = 1;

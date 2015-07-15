@@ -69,10 +69,15 @@ int main(int argc, char* argv[], char** env)
 {
 	fprintf(stderr, "WaveAsm C v0.0.1\n");
 	wvat_state wave;
+	char *isf = 0;
+	char *x = 0;
+	size_t xl = 0;
 	if(argc > 1) {
 		wva_allocstate(&wave);
-		char *x = 0;
-		size_t xl = 0;
+		if(load_file("tr3200.isf", &isf, &xl)) {
+			return 2;
+		}
+		wva_loadisf(wave, isf, xl);
 		if(load_file(argv[1], &x, &xl)) {
 			return 2;
 		}

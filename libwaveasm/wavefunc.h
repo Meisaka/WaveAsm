@@ -7,5 +7,5 @@ void * wva_realloc(void *, size_t);
 void wva_free(void *);
 
 int wva_lex(void * wvas, char * text, size_t len);
-uint32_t wva_murmur3(const void * key, size_t len);
 
+int strneq(const char *, size_t, const char *, size_t);

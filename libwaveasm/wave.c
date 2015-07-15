@@ -18,6 +18,14 @@
 #include "wavefunc.h"
 #include "setting.h"
 
+#include <stdio.h>
+
+int strneq(const char *a, size_t al, const char *b, size_t bl)
+{
+	if(al != bl) return 0;
+	return strncmp(a, b, al) == 0;
+}
+
 typedef struct wvai_state {
 	uint32_t nplatforms;
 	uint32_t nls;
@@ -35,6 +43,34 @@ int wva_freestate(wvat_state st)
 
 int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 {
+	size_t x, e;
+	int mode;
+	x = 0; mode = 0;
+	while(x < isflen) {
+		for(e = x; e < isflen && isftxt[e] != 10; e++); e;
+		switch(mode) {
+		case 0:
+			if(isftxt[x] == '<') {
+				fprintf(stderr, "Section: %d-%d\n", x, e-x);
+			}
+			if(strneq(isftxt+x, e-x, "<OPCODE>", 8)) {
+				fprintf(stderr, "OPCODE section\n");
+				mode = 1;
+			}
+			break;
+		case 1:
+			if(strneq(isftxt+x, e-x, "</OPCODE>", 9)) {
+				fprintf(stderr, "End OPCODE section\n");
+				mode = 0;
+				break;
+			}
+			break;
+		default:
+			mode = 0;
+			break;
+		}
+		x = e + 1;
+	}
 	return 0;
 }
 

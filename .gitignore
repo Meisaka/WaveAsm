@@ -5,6 +5,8 @@ libwaveasm/WaveAsm
 */CMakeFiles
 libwaveasm/Makefile
 libwaveasm/setting.h
+libwaveasm/*.asm
+libwaveasm/*.isf
 *.a
 *.o
 *.tmpl
