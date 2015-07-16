@@ -14,7 +14,7 @@
 
 typedef
 struct wvas_state {
-	void *inner_state;
+	void *in_state;
 	void *isf_state;
 	void *lc_state;
 } *wvat_state;

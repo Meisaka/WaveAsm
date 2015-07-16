@@ -16,14 +16,11 @@
  */
 #include "wave.h"
 #include "wavefunc.h"
-#include "hash.h"
 
 #include <stdio.h>
 
 //#define LEXDEBUG(a) a
 #define LEXDEBUG(a)
-
-#define MAKETOKEN(a) fprintf(stderr, "Tkn-" #a)
 
 #define TKWS 1
 #define TKHASH 2
@@ -254,54 +251,7 @@ static struct lex_ctl wvtr[] = {
 	{0, 0, TKBSL},
 };
 
-static void diag_color(const char * txt, size_t s, size_t e, int tk) {
-	int c = 0;
-	int b = 0;
-	switch(tk) {
-	case 1: c = '4'; break;
-	case 3:
-		fprintf(stderr, "H$%08x ", wva_murmur3(txt+s,e-s));
-		break;
-	case TKPCS: c = '2'; break;
-	case TKDEC:
-	case TKOCT:
-	case TKHEX:
-	case TKBIN: c = '5'; break;
-	case 19: c = '3';
-		 fprintf(stderr, "H$%08x ", wva_murmur3(txt+s,e-s));
-		 break;
-	case TKSQ:
-	case TKDQ: c = '1'; break;
-	default: b = 1; c = '7'; break;
-	}
-	if(b) fprintf(stderr, "\e[1m");
-	if(c) fprintf(stderr, "\e[3%cm", c);
-	size_t x;
-	for(x = s; x < e; x++) {
-		fputc(txt[x], stderr);
-	}
-	fprintf(stderr, "\e[0m");
-}
-
-static void lex_add_token(void * state, const char * text, size_t s, size_t e, int tk) {
-	if(tk == 19) {
-		if(text[s] == ':') {
-			s++;
-		} else if(text[e-1] == ':') {
-			e--;
-		}
-	}
-	if(s > e) {
-		fprintf(stderr, "Index out of bounds s=%d, e=%d\n",s,e);
-	}
-	char * mmm;
-	size_t x;
-	mmm = wva_alloc(e-s);
-	for(x = 0; x < e-s; x++) {
-		mmm[x] = tolower(text[s+x]);
-	}
-	diag_color(mmm,0,e-s,tk);
-}
+void lex_add_token(void * state, const char * text, size_t s, size_t e, int tk);
 
 int wva_lex(void * wvas, char * text, size_t len) {
 	size_t i = 0;

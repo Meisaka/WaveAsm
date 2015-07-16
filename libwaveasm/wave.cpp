@@ -25,6 +25,7 @@
 #include <ctype.h>
 
 #include <string>
+#include <vector>
 
 int strneq(const char *a, size_t al, const char *b, size_t bl)
 {
@@ -95,7 +96,7 @@ uint32_t wva_murmur3(const void * key, size_t len)
 	return h1;
 }
 
-namespace Wave {
+namespace wave {
 
 struct hashentry {
 	uint32_t keylen;
@@ -128,7 +129,6 @@ public:
 
 		if(!this) return 0;
 		h = wva_murmur3(key, kl) % this->tablesize;
-		fprintf(stderr, "HT: H:%d P:%X\n", h, this->table[h]);
 		return wva_getentryhash(this->table[h], key, kl);
 	}
 	int set(const char * key, uint32_t kl, const T &d) {
@@ -220,15 +220,35 @@ public:
 	}
 };
 
-} // namespace Wave
-
-struct wvai_state {
+struct istate {
 	uint32_t nplatforms;
 	uint32_t nls;
 };
 
-int wva_allocstate(wvat_state *st)
+struct isfdata {
+	std::string name;
+	wave::arrayhash<std::string> ht;
+};
+
+struct isfstate {
+	uint32_t cisf;
+	std::vector<isfdata> isflist;
+
+	isfstate() {
+		cisf = 0;
+	}
+};
+
+} // namespace wave
+
+int wva_allocstate(wvat_state *est)
 {
+	wvat_state st;
+	st = new wvas_state();
+	st->in_state = new wave::istate();
+	st->isf_state = new wave::isfstate();
+
+	*est = st;
 	return 0;
 }
 
@@ -237,12 +257,77 @@ int wva_freestate(wvat_state st)
 	return 0;
 }
 
-#define MAXOPCODELEN 255
-
 static void memtolower(char *d, const char *s, size_t l)
 {
 	size_t x;
 	for(x = 0; x < l; x++) d[x] = tolower(s[x]);
+}
+
+static void stringlower(std::string &d, const char *s, size_t l)
+{
+	size_t x;
+	d.resize(l);
+	for(x = 0; x < l; x++) d[x] = tolower(s[x]);
+}
+
+static void diag_color(const char * txt, size_t s, size_t e, int tk) {
+	int c = 0;
+	int b = 0;
+	switch(tk) {
+	case 1: c = '4'; break;
+	case 3:
+		fprintf(stderr, "H$%08x ", wva_murmur3(txt+s,e-s));
+		break;
+	case 8: c = '2'; break;
+	case 4:
+	case 27:
+	case 26:
+	case 28: c = '5'; break;
+	case 19: c = '3';
+		 fprintf(stderr, "H$%08x ", wva_murmur3(txt+s,e-s));
+		 break;
+	case 10:
+	case 6: c = '1'; break;
+	case 44: c = '1'; b = 1; break;
+	default: b = 1; c = '7'; break;
+	}
+	if(b) fprintf(stderr, "\e[1m");
+	if(c) fprintf(stderr, "\e[3%cm", c);
+	size_t x;
+	for(x = s; x < e; x++) {
+		fputc(txt[x], stderr);
+	}
+	fprintf(stderr, "\e[0m");
+}
+
+extern "C"
+void lex_add_token(void * state, const char * text, size_t s, size_t e, int tk)
+{
+	wave::isfdata &st = *(wave::isfdata*)state;
+	wave::hashentry *hte;
+	if(tk == 19) {
+		if(text[s] == ':') {
+			s++;
+		} else if(text[e-1] == ':') {
+			e--;
+		}
+	}
+	if(s > e) {
+		fprintf(stderr, "Index out of bounds s=%d, e=%d\n",s,e);
+	}
+	std::string mmm;
+	stringlower(mmm, text+s, e-s);
+	switch(tk) {
+	case 3:
+	case 19:
+		hte = st.ht.lookup(mmm.data(), mmm.length());
+		if(hte) tk = 44;
+		diag_color(mmm.c_str(),0,e-s,tk);
+		break;
+	default:
+		diag_color(text,s,e,tk);
+		break;
+	}
 }
 
 int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
@@ -252,12 +337,14 @@ int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 	const char *line;
 	const char *rc;
 	size_t ll, ln;
-	char opc[MAXOPCODELEN+1];
+	std::string opc;
+	wave::isfstate &isf = *(wave::isfstate*)st->isf_state;
 	x = 0; mode = 0;
 	ll = 0;
 	ln = 0;
-	Wave::arrayhash<std::string> ht;
-	Wave::hashentry *hte;
+	isf.isflist.resize(isf.isflist.size()+1);
+	wave::isfdata &cisf = isf.isflist[isf.isflist.size()-1];
+	wave::hashentry *hte;
 	while(x < isflen) {
 		ln++;
 		line = isftxt + x;
@@ -284,22 +371,14 @@ int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 				break;
 			}
 			if(0 != (rc = (const char*)memchr(line, ':', ll))) {
-				if(rc - line > MAXOPCODELEN) {
-					fprintf(stderr, "ISF: Opcode too long.\n");
-					break;
-				}
-				memtolower(opc, line, rc-line);
-				opc[rc-line+1] = 0;
-				fprintf(stderr, "ISF: Opcode: %s\n", opc);
-				hte = ht.lookup(opc, rc-line);
+				stringlower(opc, line, rc-line);
+				hte = cisf.ht.lookup(opc.data(), opc.length());
 				if(!hte) {
-					fprintf(stderr, "ISF: Adding opcode\n");
-					ht.set(opc, rc-line, std::string(rc, ll - (rc-line)));
+					fprintf(stderr, "ISF: Adding opcode %s\n", opc.c_str());
+					cisf.ht.set(opc.data(), opc.length(), std::string(rc, ll - (rc-line)));
 				} else {
-					fprintf(stderr, "ISF: Adding encoding\n");
 					std::string &st = *(std::string*)hte->data;
 					st.append(rc, ll - (rc-line));
-					fprintf(stderr, "ISF: %s\n", st.c_str());
 				}
 			}
 			break;
@@ -319,7 +398,12 @@ int wva_loadisfc(wvat_state st, uint8_t *isfdat, size_t isflen)
 
 int wva_assemble(wvat_state st, wvat_obj *ob, char *atxt, size_t len)
 {
-	wva_lex(st, atxt, len);
+	wave::isfstate &isf = *(wave::isfstate*)st->isf_state;
+	if(isf.isflist.size() == 0) {
+		fprintf(stderr, "WAVEASM: No ISF loaded\n");
+		return 1;
+	}
+	wva_lex(&isf.isflist[0], atxt, len);
 	return 0;
 }
 
