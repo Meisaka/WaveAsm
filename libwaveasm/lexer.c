@@ -16,6 +16,7 @@
  */
 #include "wave.h"
 #include "wavefunc.h"
+#include "hash.h"
 
 #include <stdio.h>
 

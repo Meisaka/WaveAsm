@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.6)
 
 project(WaveAsm)
 
-file(GLOB WAVESRC "*.c" "*.h")
+file(GLOB WAVESRC "*.cpp" "*.hpp" "*.c" "*.h")
 file(GLOB WAVECLISRC "cli/*.c" "cli/*.h")
 
 configure_file("setting.in" "setting.h")

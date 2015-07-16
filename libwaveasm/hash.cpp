@@ -2,12 +2,14 @@
 #include "hash.h"
 #include "wavefunc.h"
 #include "string.h"
+#include <stdio.h>
 
 // MurmurHash3 was written by Austin Appleby, and is public domain.
 // see http://code.google.com/p/smhasher/
 
 #define ROTL32(x,y) ((x << y) | (x >> (32 - y)))
 
+extern "C" {
 uint32_t wva_murmur3(const void * key, size_t len)
 {
 	const uint8_t * data = (const uint8_t*)key;
@@ -66,7 +68,7 @@ uint32_t wva_murmur3(const void * key, size_t len)
 
 	return h1;
 }
-
+} // extern
 struct wvas_hashentry* wva_getentryhash(struct wvas_hashentry* hte, const char * key, uint32_t kl) {
 	while(hte) {
 		if(hte->keylen == kl && strncmp(key, hte->key, kl) == 0) {
@@ -82,11 +84,13 @@ struct wvas_hashentry* wva_lookuphash(wvat_hashtab t, const char * key, uint32_t
 
 	if(!t) return 0;
 	h = wva_murmur3(key, kl) % t->tablesize;
+	fprintf(stderr, "HT: H:%d P:%X\n", h, t->table[h]);
 	return wva_getentryhash(t->table[h], key, kl);
 }
 
 int wva_addhash(wvat_hashtab t, const char * key, uint32_t kl, const uint8_t * d, uint32_t dl) {
 	uint32_t h;
+	uint8_t *td;
 	struct wvas_hashentry* hte;
 	struct wvas_hashentry* htn;
 
@@ -106,6 +110,7 @@ int wva_addhash(wvat_hashtab t, const char * key, uint32_t kl, const uint8_t * d
 		hte->datalen = 0;
 		hte->data = 0;
 		memcpy(hte->key, key, kl);
+		t->table[h] = hte;
 	} else {
 		htn = wva_getentryhash(hte, key, kl);
 		if(htn) {
@@ -129,17 +134,29 @@ int wva_addhash(wvat_hashtab t, const char * key, uint32_t kl, const uint8_t * d
 	}
 	if(!hte->datalen && dl) {
 		hte->data = wva_alloc(dl);
+		fprintf(stderr, "HT: Allocating data\n");
 		if(!hte->data) {
 			wva_free(hte->key);
 			wva_free(hte);
+			hte->datalen = 0;
+			fprintf(stderr, "HT: ERROR: Allocating data failed\n");
 			return 4;
 		}
-	}
-	if(!dl && hte->datalen) {
-		wva_free(hte->data);
-		hte->data = 0;
-	} else if(dl && hte->datalen == dl) {
+		hte->datalen = dl;
 		memcpy(hte->data, d, dl);
+	} else if(!dl && hte->datalen) {
+		wva_free(hte->data);
+		fprintf(stderr, "HT: Freeing data\n");
+		hte->data = 0;
+	} else {
+		td = (uint8_t*)wva_realloc(hte->data, hte->datalen + dl);
+		if(!td) {
+			return 4;
+		}
+		memcpy(td+hte->datalen, d, dl);
+		hte->data = td;
+		hte->datalen += dl;
+		fprintf(stderr, "HT: Writing data\n");
 	}
 	return 0;
 }

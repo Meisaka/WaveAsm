@@ -24,6 +24,9 @@ struct wvas_obj {
 	size_t len;
 } *wvat_obj;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 /* create and destroy WaveAsm instances */
 int wva_allocstate(wvat_state *);
 int wva_freestate(wvat_state);
@@ -39,6 +42,8 @@ int wva_assemble(wvat_state, wvat_obj *, char *, size_t);
 
 /* free object data used by WaveAsm */
 int wva_objfree(wvat_obj);
-
+#ifdef __cplusplus
+}
+#endif
 #endif
 
