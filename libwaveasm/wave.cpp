@@ -362,6 +362,15 @@ int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 			if(strneq(line, ll, "<OPCODE>", 8)) {
 				fprintf(stderr, "OPCODE section\n");
 				mode = 1;
+			} else if(strneq(line, ll, "<HEAD>", 6)) {
+				fprintf(stderr, "HEAD section\n");
+				mode = 2;
+			} else if(strneq(line, ll, "<REG>", 5)) {
+				fprintf(stderr, "REG section\n");
+				mode = 3;
+			} else if(strneq(line, ll, "<LIT>", 5)) {
+				fprintf(stderr, "LIT section\n");
+				mode = 4;
 			}
 			break;
 		case 1:
@@ -380,6 +389,39 @@ int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 					std::string &st = *(std::string*)hte->data;
 					st.append(rc, ll - (rc-line));
 				}
+			}
+			break;
+		case 2:
+			if(strneq(line, ll, "</HEAD>", 7)) {
+				fprintf(stderr, "End HEAD section\n");
+				mode = 0;
+				break;
+			}
+			if(0 != (rc = (const char*)memchr(line, ':', ll))) {
+				std::string item(line, rc-line);
+				fprintf(stderr, "ISF: %s\n", item.c_str());
+			}
+			break;
+		case 3:
+			if(strneq(line, ll, "</REG>", 6)) {
+				fprintf(stderr, "End REG section\n");
+				mode = 0;
+				break;
+			}
+			if(0 != (rc = (const char*)memchr(line, ':', ll))) {
+				std::string item(line, rc-line);
+				fprintf(stderr, "ISF: %s\n", item.c_str());
+			}
+			break;
+		case 4:
+			if(strneq(line, ll, "</LIT>", 6)) {
+				fprintf(stderr, "End LIT section\n");
+				mode = 0;
+				break;
+			}
+			if(0 != (rc = (const char*)memchr(line, ':', ll))) {
+				std::string item(line, rc-line);
+				fprintf(stderr, "ISF: %s\n", item.c_str());
 			}
 			break;
 		default:

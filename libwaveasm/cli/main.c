@@ -86,6 +86,18 @@ int main(int argc, char* argv[], char** env)
 		wva_assemble(wave, &obj, x, xl);
 		wva_freestate(wave);
 	}
+	WVT_Bitset bit;
+	wva_alloc_bits(&bit);
+	wva_add_bits(bit, 01644, 12);
+	wva_add_bits(bit, 01644, 12);
+	wva_add_bits(bit, 01644, 12);
+	wva_add_bits(bit, 01644, 12);
+	wva_add_bits(bit, 01644, 12);
+	wva_add_bits(bit, 01644, 11);
+	wva_show_bits(bit);
+	wva_write_bits_le(bit, 0, 0);
+	wva_write_bits_be(bit, 0, 0);
+	wva_free_bits(&bit);
 	return 0;
 }
 

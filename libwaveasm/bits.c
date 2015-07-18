@@ -116,11 +116,69 @@ void wva_add_bits(WVT_Bitset v, uint32_t b, int sz)
 
 int wva_write_bits_le(WVT_Bitset v, uint8_t *buf, size_t sz)
 {
+	uint32_t blocks;
+	uint32_t m, sa;
+	uint8_t q;
+	int i, k, r;
+	if(v == 0) return;
+	blocks = (v->nbits - 1) >> 5;
+	m = 0;
+	q = 0;
+	for(k = 0; k <= blocks; k++) {
+		if(k) {
+			sa = v->bset[blocks - k];
+			i = 32;
+		} else {
+			sa = v->acum;
+			i = (v->nbits ) & 31;
+		}
+		r = 0;
+		while(r < i) {
+			if(r && (m & 7) == 0) {
+				fprintf(stderr, "%02X ", q);
+				q = 0;
+			}
+			q |= ((sa >> r) & 1) << (m & 7);
+			r++;
+			m++;
+		}
+	}
+	if(m & 7) {
+		fprintf(stderr, "%02X ", q);
+		q = 0;
+	}
+	putc('\n', stdout);
 	return 0;
 }
 
 int wva_write_bits_be(WVT_Bitset v, uint8_t *buf, size_t sz)
 {
+	uint32_t blocks;
+	uint32_t m, sa;
+	uint8_t q;
+	int i, k;
+	if(v == 0) return;
+	blocks = (v->nbits - 1) >> 5;
+	m = v->nbits - 1;
+	q = 0;
+	for(k = blocks; k >= 0; k--) {
+		if(k) {
+			sa = v->bset[blocks - k];
+			i = 31;
+		} else {
+			sa = v->acum;
+			i = m & 31;
+		}
+		for(; i >= 0; i--) {
+			q <<= 1; q |= ((sa >> i) & 1);
+			if(((m) & 7) == 0) {
+				fprintf(stdout, "%02X ", q);
+				q = 0;
+			}
+			m--;
+		}
+	}
+	putc('\n', stdout);
 	return 0;
 }
 
