@@ -98,15 +98,17 @@ uint32_t wva_murmur3(const void * key, size_t len)
 
 namespace wave {
 
+template<typename T>
 struct hashentry {
 	uint32_t keylen;
 	char *key;
 	uint32_t datalen;
-	void *data;
-	hashentry * next;
+	T *data;
+	hashentry<T> * next;
 };
 
-struct hashentry* wva_getentryhash(struct hashentry* hte, const char * key, uint32_t kl) {
+template<typename T>
+hashentry<T>* wva_getentryhash(hashentry<T>* hte, const char * key, uint32_t kl) {
 	while(hte) {
 		if(hte->keylen == kl && strncmp(key, hte->key, kl) == 0) {
 			return hte;
@@ -122,9 +124,9 @@ private:
 	uint32_t tablesize;
 	uint32_t usedslots;
 	uint32_t entries;
-	hashentry ** table;
+	hashentry<T> ** table;
 public:
-	hashentry* lookup(const char *key, uint32_t kl) { 
+	hashentry<T>* lookup(const char *key, uint32_t kl) { 
 		uint32_t h;
 
 		if(!this) return 0;
@@ -134,14 +136,14 @@ public:
 	int set(const char * key, uint32_t kl, const T &d) {
 		uint32_t h;
 		uint8_t *td;
-		hashentry* hte;
-		hashentry* htn;
+		hashentry<T>* hte;
+		hashentry<T>* htn;
 
 		if(!this || !key || !kl) return 0;
 		h = wva_murmur3(key, kl) % this->tablesize;
 		hte = this->table[h];
 		if(!hte) {
-			hte = (struct hashentry*)wva_alloc(sizeof(struct hashentry));
+			hte = (hashentry<T>*)wva_alloc(sizeof(hashentry<T>));
 			if(!hte) return 4;
 			hte->next = 0;
 			hte->key = (char*)wva_alloc(kl);
@@ -160,7 +162,7 @@ public:
 				hte = htn;
 			} else {
 				htn = hte;
-				hte = (struct hashentry*)wva_alloc(sizeof(struct hashentry));
+				hte = (hashentry<T>*)wva_alloc(sizeof(hashentry<T>));
 				if(!hte) return 4;
 				hte->next = htn;
 				hte->key = (char*)wva_alloc(kl);
@@ -199,24 +201,38 @@ public:
 		for(i = 0; i < this->tablesize; i++) {
 			((void**)arr)[i] = 0;
 		}
-		this->table = (struct hashentry**)arr;
+		this->table = (hashentry<T>**)arr;
 	}
 	~arrayhash() {
 		if(!this || !this->table) return;
 		int i;
-		struct hashentry* hte;
-		struct hashentry* htn;
+		hashentry<T>* hte;
+		hashentry<T>* htn;
 		for(i = 0; i < this->tablesize; i++) {
 			hte = this->table[i];
 			while(hte) {
 				if(hte->key) wva_free(hte->key);
-				if(hte->data) delete (T*)hte->data;
+				if(hte->data) delete hte->data;
 				htn = hte->next;
 				wva_free(hte);
 				hte = htn;
 			}
 		}
 		wva_free(this->table);
+	}
+};
+
+typedef std::basic_string<uint8_t> datstring;
+
+struct isfopcode {
+	uint32_t arc;
+	datstring enc;
+	std::string arf;
+	std::string encode;
+
+	isfopcode(uint32_t argc, const std::string &argf, const std::string &enctxt)
+		: arc(argc), arf(argf), encode(enctxt)
+	{
 	}
 };
 
@@ -227,7 +243,7 @@ struct istate {
 
 struct isfdata {
 	std::string name;
-	wave::arrayhash<std::string> ht;
+	wave::arrayhash<isfopcode> opht;
 };
 
 struct isfstate {
@@ -304,7 +320,7 @@ extern "C"
 void lex_add_token(void * state, const char * text, size_t s, size_t e, int tk)
 {
 	wave::isfdata &st = *(wave::isfdata*)state;
-	wave::hashentry *hte;
+	wave::hashentry<wave::isfopcode> *hte;
 	if(tk == 19) {
 		if(text[s] == ':') {
 			s++;
@@ -320,7 +336,7 @@ void lex_add_token(void * state, const char * text, size_t s, size_t e, int tk)
 	switch(tk) {
 	case 3:
 	case 19:
-		hte = st.ht.lookup(mmm.data(), mmm.length());
+		hte = st.opht.lookup(mmm.data(), mmm.length());
 		if(hte) tk = 44;
 		diag_color(mmm.c_str(),0,e-s,tk);
 		break;
@@ -332,6 +348,7 @@ void lex_add_token(void * state, const char * text, size_t s, size_t e, int tk)
 
 int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 {
+	using wave::isfopcode;
 	size_t x, e;
 	int mode;
 	const char *line;
@@ -344,7 +361,7 @@ int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 	ln = 0;
 	isf.isflist.resize(isf.isflist.size()+1);
 	wave::isfdata &cisf = isf.isflist[isf.isflist.size()-1];
-	wave::hashentry *hte;
+	wave::hashentry<wave::isfopcode> *hte;
 	while(x < isflen) {
 		ln++;
 		line = isftxt + x;
@@ -381,12 +398,21 @@ int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 			}
 			if(0 != (rc = (const char*)memchr(line, ':', ll))) {
 				stringlower(opc, line, rc-line);
-				hte = cisf.ht.lookup(opc.data(), opc.length());
+				hte = cisf.opht.lookup(opc.data(), opc.length());
 				if(!hte) {
-					fprintf(stderr, "ISF: Adding opcode %s\n", opc.c_str());
-					cisf.ht.set(opc.data(), opc.length(), std::string(rc, ll - (rc-line)));
+					rc++;
+					std::string linedat(rc, ll - (rc-line));
+					size_t n = linedat.find_first_of(':', 0);
+					std::string lst(linedat.substr(0, n));
+					size_t k = linedat.find_first_of(':', ++n);
+					std::string fst(linedat.substr(n, k-n));
+					std::string est(linedat.substr(1+k));
+					uint32_t ol = 0;
+					fprintf(stderr, "ISF: Adding opcode %s - %s - %s - %s\n", opc.c_str(), lst.c_str(), fst.c_str(), est.c_str());
+					isfopcode io(ol, fst, linedat);
+					cisf.opht.set(opc.data(), opc.length(), io);
 				} else {
-					std::string &st = *(std::string*)hte->data;
+					std::string &st = ((isfopcode*)hte->data)->encode;
 					st.append(rc, ll - (rc-line));
 				}
 			}
