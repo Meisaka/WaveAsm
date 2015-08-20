@@ -243,7 +243,7 @@ struct istate {
 
 struct isfdata {
 	std::string name;
-	wave::arrayhash<isfopcode> opht;
+	wave::arrayhash<std::vector<isfopcode>> opht;
 };
 
 struct isfstate {
@@ -320,7 +320,7 @@ extern "C"
 void lex_add_token(void * state, const char * text, size_t s, size_t e, int tk)
 {
 	wave::isfdata &st = *(wave::isfdata*)state;
-	wave::hashentry<wave::isfopcode> *hte;
+	wave::hashentry<std::vector<wave::isfopcode>> *hte;
 	if(tk == 19) {
 		if(text[s] == ':') {
 			s++;
@@ -361,7 +361,7 @@ int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 	ln = 0;
 	isf.isflist.resize(isf.isflist.size()+1);
 	wave::isfdata &cisf = isf.isflist[isf.isflist.size()-1];
-	wave::hashentry<wave::isfopcode> *hte;
+	wave::hashentry<std::vector<wave::isfopcode>> *hte;
 	while(x < isflen) {
 		ln++;
 		line = isftxt + x;
@@ -399,21 +399,24 @@ int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 			if(0 != (rc = (const char*)memchr(line, ':', ll))) {
 				stringlower(opc, line, rc-line);
 				hte = cisf.opht.lookup(opc.data(), opc.length());
+				rc++;
+				std::string linedat(rc, ll - (rc-line));
+				size_t n = linedat.find_first_of(':', 0);
+				std::string lst(linedat.substr(0, n));
+				size_t k = linedat.find_first_of(':', ++n);
+				std::string fst(linedat.substr(n, k-n));
+				std::string est(linedat.substr(1+k));
+				uint32_t ol = 0;
+				isfopcode io(ol, fst, linedat);
 				if(!hte) {
-					rc++;
-					std::string linedat(rc, ll - (rc-line));
-					size_t n = linedat.find_first_of(':', 0);
-					std::string lst(linedat.substr(0, n));
-					size_t k = linedat.find_first_of(':', ++n);
-					std::string fst(linedat.substr(n, k-n));
-					std::string est(linedat.substr(1+k));
-					uint32_t ol = 0;
 					fprintf(stderr, "ISF: Adding opcode %s - %s - %s - %s\n", opc.c_str(), lst.c_str(), fst.c_str(), est.c_str());
-					isfopcode io(ol, fst, linedat);
-					cisf.opht.set(opc.data(), opc.length(), io);
+					std::vector<isfopcode> iov;
+					iov.push_back(io);
+					cisf.opht.set(opc.data(), opc.length(), iov);
 				} else {
-					std::string &st = ((isfopcode*)hte->data)->encode;
-					st.append(rc, ll - (rc-line));
+					std::vector<isfopcode> &st = *hte->data;
+					fprintf(stderr, "ISF: Extending opcode %s - %s - %s - %s\n", opc.c_str(), lst.c_str(), fst.c_str(), est.c_str());
+					st.push_back(io);
 				}
 			}
 			break;
