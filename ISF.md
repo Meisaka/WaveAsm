@@ -99,9 +99,9 @@ LIT Section
 
 This section defines literal values, and specifies how constant values are encoded into instructions that may support them.
 Literals are defined by their length in bits and by one or more encoding definitions.
-Each encoding definition may specify a range or "*" to match any number.
+Each encoding definition may specify a range or ```*``` to match any number.
 The order of lines with each definition is significant, the most specific/smallest ranges must come before larger or more general ranges.
-The "*" line (if any) MUST be last in the list.
+The ```*``` line (if any) MUST be last in the list.
 
 The special "O" and "M" attributes allow simple trasforms to the number before encoding, "O" will add to the given value, "M" will perform an arithmatic right shift. "O" is always performed before "M" if both are set.
 
