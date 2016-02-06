@@ -251,9 +251,9 @@ static struct lex_ctl wvtr[] = {
 	{0, 0, TKBSL},
 };
 
-void lex_add_token(void * state, const char * text, size_t s, size_t e, int tk);
+void lex_add_token(void * state, void *fs, const char * text, size_t s, size_t e, int tk);
 
-int wva_lex(void * wvas, char * text, size_t len) {
+int wva_lex(void * wvas, void *fs, char * text, size_t len) {
 	size_t i = 0;
 	uint8_t cc = 0;
 	int mo = 0;
@@ -298,7 +298,7 @@ int wva_lex(void * wvas, char * text, size_t len) {
 					LEXDEBUG(fprintf(stderr, "{%d}", mtkn);)
 					lmtkn = mtkn;
 					tend = i;
-					lex_add_token(wvas, text, tbegin, tend, mtkn);
+					lex_add_token(wvas, fs, text, tbegin, tend, mtkn);
 					if(mtkn != 1) cif = 1;
 					if(mtkn == 24) cif = 0;
 				}
@@ -312,7 +312,7 @@ int wva_lex(void * wvas, char * text, size_t len) {
 				LEXDEBUG(fprintf(stderr, "{|%d}", mtkn);)
 				tend = i;
 				lmtkn = mtkn;
-				lex_add_token(wvas, text, tbegin, tend, mtkn);
+				lex_add_token(wvas, fs, text, tbegin, tend, mtkn);
 				tbegin = i;
 				mtkn = ntkn;
 				if(mtkn != 1) cif = 1;

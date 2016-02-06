@@ -134,13 +134,14 @@ int wva_write_bits_le(WVT_Bitset v, uint8_t *buf, size_t sz)
 		}
 		r = 0;
 		while(r < i) {
-			if(r && (m & 7) == 0) {
-				fprintf(stderr, "%02X ", q);
-				q = 0;
-			}
 			q |= ((sa >> r) & 1) << (m & 7);
 			r++;
 			m++;
+			if(r && (m & 7) == 0) {
+				fprintf(stderr, "%02X ", q);
+				q = 0;
+				m = 0;
+			}
 		}
 	}
 	if(m & 7) {
