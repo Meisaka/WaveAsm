@@ -516,7 +516,14 @@ struct istate {
 
 struct astkn {
 	size_t start;
+	size_t len;
 	int tkn;
+};
+
+struct assym {
+	size_t start;
+	size_t file;
+	size_t line;
 };
 
 struct assemblyline {
@@ -542,6 +549,7 @@ struct assemblystate {
 	size_t cfile;
 	size_t cline;
 	std::vector<assemblyfile> files;
+	wave::arrayhash<assym> symbols;
 
 	assemblystate() {
 		cfile = 0;
@@ -567,6 +575,47 @@ struct isfstate {
 };
 
 } // namespace wave
+
+enum WVA_PARSE {
+	TKN_NONE = 0,
+	TKN_WS = 1,
+	TKN_HASH = 2,
+	TKN_IDENT = 3,
+	TKN_DECNUM = 4,
+	TKN_BANG = 5,
+	TKN_STRING = 6,
+	TKN_DS = 7,
+	TKN_CENT = 8,
+	TKN_AMP = 9,
+	TKN_CHAR = 10,
+	TKN_LPAREN = 11,
+	TKN_RPAREN = 12,
+	TKN_STAR = 13,
+	TKN_PLUS = 14,
+	TKN_COMMA = 15,
+	TKN_MINUS = 16,
+	TKN_MACRO = 17,
+	TKN_DIV = 18,
+	TKN_LABEL = 19,
+	TKN_SEMIC = 20,
+	TKN_LESS = 21,
+	TKN_GRTR = 22,
+	TKN_EQUL = 23,
+	TKN_ELINE = 24,
+	TKN_ECOMMENT = 25,
+	TKN_HEXNUM = 26,
+	TKN_OCTNUM = 27,
+	TKN_BINNUM = 28,
+	TKN_ATSGN = 29,
+	TKN_LBRACK = 30,
+	TKN_RBRACK = 31,
+	TKN_LBRACE = 32,
+	TKN_RBRACE = 33,
+	TKN_BKSLSH = 34,
+	TKN_OPCODE = 44,
+	TKN_KEYWORD = 45,
+	TKN_REG = 46,
+};
 
 int wva_allocstate(wvat_state *est)
 {
@@ -601,19 +650,21 @@ static void diag_color(const char * txt, size_t s, size_t e, int tk) {
 	int c = 0;
 	int b = 0;
 	switch(tk) {
-	case 1: c = '4'; break;
-	case 3:
+	case TKN_WS: c = '4'; break;
+	case TKN_IDENT:
 		break;
-	case 8: c = '2'; break;
-	case 4:
-	case 27:
-	case 26:
-	case 28: c = '5'; break;
-	case 19: c = '3';
+	case TKN_CENT: c = '2'; break;
+	case TKN_DECNUM:
+	case TKN_HEXNUM:
+	case TKN_OCTNUM:
+	case TKN_BINNUM: c = '5'; break;
+	case TKN_LABEL: c = '3';
 		 break;
-	case 10:
-	case 6: c = '1'; break;
-	case 44: c = '1'; b = 1; break;
+	case TKN_CHAR:
+	case TKN_STRING: c = '1'; break;
+	case TKN_OPCODE: c = '1'; b = 1; break;
+	case TKN_KEYWORD: c = '2'; b = 1; break;
+	case TKN_REG: c = '4'; b = 1; break;
 	default: b = 1; c = '7'; break;
 	}
 	if(b) fprintf(stderr, "\e[1m");
@@ -625,22 +676,147 @@ static void diag_color(const char * txt, size_t s, size_t e, int tk) {
 	fprintf(stderr, "\e[0m");
 }
 
+static int wva_parse(wvat_state wvst, wave::assemblystate *ast, const char * text, size_t s)
+{
+	using namespace wave;
+	isfstate *isfst = (isfstate*)wvst->isf_state;
+	isfdata &st = isfst->isflist[isfst->cisf];
+	hashentry<std::vector<isfopcode>> *hopc;
+	size_t fn;
+	int errc = 0;
+	fn = 0;
+	assemblyfile *cf;
+	if(!ast->files.size()) return 0;
+	cf = &ast->files[0];
+	// early processing pass
+	for(size_t fl = 0; fl < cf->lines.size(); fl++) {
+		assemblyline &cl = cf->lines[fl];
+		fprintf(stderr, "f%d:l%d:", fn, fl);
+		int ulabel = 0;
+		int ueval = 0;
+		for(int i = 0; i < cl.tkn.size(); i++) {
+			astkn &ctkn = cl.tkn[i];
+			hashentry<assym> *hte;
+			std::string mmm;
+			int evchk = 0;
+			switch(ctkn.tkn) {
+			case TKN_IDENT:
+				hte = ast->symbols.lookup(text+ctkn.start, ctkn.len);
+				mmm.assign(text+ctkn.start, ctkn.len);
+				if(!hte) {
+					if(ulabel) {
+						fprintf(stderr, "%d:%d: Error: Undefined symbol: %s\n", fn, fl, mmm.c_str());
+						errc++;
+					}
+				} else if(!ueval) {
+					fprintf(stderr, "N-IDENT ");
+					ueval = 1;
+				} else {
+					fprintf(stderr, "%d:%d: Error: Syntax: %s\n", fn, fl, mmm.c_str());
+					errc++;
+				}
+				break;
+			case TKN_DECNUM:
+			case TKN_HEXNUM:
+			case TKN_OCTNUM:
+			case TKN_BINNUM:
+			case TKN_CHAR:
+				if(ueval) {
+					fprintf(stderr, "NUM ");
+				} else {
+					fprintf(stderr, "N-NUM ");
+					ueval = 1;
+				}
+				break;
+			case TKN_PLUS:
+				fprintf(stderr, "P+ ");
+				break;
+			case TKN_MINUS:
+				fprintf(stderr, "P- ");
+				break;
+			case TKN_STAR:
+				fprintf(stderr, "P* ");
+				break;
+			case TKN_DIV:
+				fprintf(stderr, "P/ ");
+				break;
+			case TKN_LPAREN:
+				fprintf(stderr, "P( ");
+				ueval = 1;
+				break;
+			case TKN_RPAREN:
+				fprintf(stderr, "PE) ");
+				break;
+			default:
+				if(ueval) {
+					fprintf(stderr, "F-NUM ");
+					ueval = 0;
+				}
+				break;
+			}
+			switch(ctkn.tkn) {
+			case TKN_IDENT:
+				if(!hte) {
+					// make an identifier on the beginning of lines a label
+					if(!ulabel) {
+						ctkn.tkn = TKN_LABEL;
+						ast->symbols.set(text+ctkn.start, ctkn.len, {ctkn.start,fn,fl});
+					}
+				}
+				break;
+			case TKN_LABEL:
+				hte = ast->symbols.lookup(text+ctkn.start, ctkn.len);
+				mmm.assign(text+ctkn.start, ctkn.len);
+				if(!hte) {
+					ast->symbols.set(text+ctkn.start, ctkn.len, {ctkn.start,fn,fl});
+				} else {
+					fprintf(stderr, "%d:%d: Error: duplicate symbol: %s\n", fn, fl, mmm.c_str());
+					fprintf(stderr, "%d:%d: Info: previous definition here.\n", hte->data->file, hte->data->line);
+				}
+				break;
+			case TKN_DECNUM:
+			case TKN_HEXNUM:
+			case TKN_OCTNUM:
+			case TKN_BINNUM:
+			case TKN_CHAR:
+			case TKN_PLUS:
+			case TKN_MINUS:
+			case TKN_STAR:
+			case TKN_DIV:
+			case TKN_LPAREN:
+			case TKN_RPAREN:
+				break;
+			default:
+				fprintf(stderr, "!%02x ", ctkn.tkn);
+				break;
+			}
+			if(ctkn.tkn != 1) {
+				ulabel = 1;
+			}
+		}
+		fprintf(stderr, "\n");
+	}
+	return errc;
+}
+
 extern "C"
 void lex_add_token(void * state, void *fs, const char * text, size_t s, size_t e, int tk)
 {
+	using namespace wave;
 	wvat_state wvst = (wvat_state)state;
-	wave::isfstate *isfst = (wave::isfstate*)wvst->isf_state;
-	wave::assemblystate *ast = (wave::assemblystate*)fs;
-	wave::assemblyfile &cf = ast->files[ast->cfile];
-	wave::assemblyline *cl = nullptr;
-	wave::isfdata &st = isfst->isflist[isfst->cisf];
-	wave::hashentry<std::vector<wave::isfopcode>> *hte;
+	isfstate *isfst = (isfstate*)wvst->isf_state;
+	assemblystate *ast = (assemblystate*)fs;
+	assemblyfile &cf = ast->files[ast->cfile];
+	assemblyline *cl = nullptr;
+	isfdata &st = isfst->isflist[isfst->cisf];
+	hashentry<std::vector<isfopcode>> *hto;
+	hashentry<isfkey> *htk;
+	hashentry<isfreg> *htr;
 	while(cf.lines.size() <= ast->cline) {
-		cf.lines.push_back(wave::assemblyline());
+		cf.lines.push_back(assemblyline());
 	}
 	cl = &cf.lines[ast->cline];
-	cl->tkn.push_back({s,tk});
-	if(tk == 19) {
+	if(tk == TKN_LABEL) {
 		if(text[s] == ':') {
 			s++;
 		} else if(text[e-1] == ':') {
@@ -652,32 +828,39 @@ void lex_add_token(void * state, void *fs, const char * text, size_t s, size_t e
 	}
 	std::string mmm;
 	stringlower(mmm, text+s, e-s);
-	fprintf(stderr, "$%d", tk);
 	switch(tk) {
-	case 3:
-	case 17:
-	case 19:
-		hte = st.opht.lookup(mmm.data(), mmm.length());
-		if(hte) {
-			tk = 44;
-			cl->ops = hte->data;
-			WV_DEBUG("$OC:%d$", cl->ops->size());
+	case TKN_IDENT:
+	case TKN_CENT:
+	case TKN_MACRO:
+	case TKN_LABEL:
+		if((hto = st.opht.lookup(mmm.data(), mmm.length()))) {
+			tk = TKN_OPCODE;
+			cl->ops = hto->data;
+		} else if((htr = st.reght.lookup(mmm.data(), mmm.length()))) {
+			tk = TKN_REG;
+		} else if((htk = st.keyht.lookup(mmm.data(), mmm.length()))) {
+			tk = TKN_KEYWORD;
 		}
 		diag_color(mmm.c_str(),0,e-s,tk);
 		break;
-	case 24:
+	case TKN_ELINE:
 		ast->cline++;
-		WV_DEBUG("\nEOL %d: ", ast->cline);
-		if(cl->ops) {
-			for(size_t x = 0; x < cl->ops->size(); x++) {
-				WV_DEBUG(" FMT:\"%s\"", (*cl->ops)[x].fmt.c_str());
-			}
-		}
-		WV_DEBUG("\n");
+		fprintf(stderr,"\n");
 		break;
 	default:
 		diag_color(text,s,e,tk);
 		break;
+	}
+	cl->tkn.push_back({s,e-s,tk});
+	if(tk == TKN_ELINE) {
+		for(int i = 0; i < cl->tkn.size(); i++) {
+		}
+		if(cl->ops) {
+			for(size_t x = 0; x < cl->ops->size(); x++) {
+				WV_DEBUG(" FMT:\"%s\"", (*cl->ops)[x].fmt.c_str());
+			}
+			WV_DEBUG("\n");
+		}
 	}
 }
 
@@ -780,12 +963,14 @@ int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 				mode = 0;
 				break;
 			}
-			if(0 != (rc = (const char*)memchr(line, ':', ll))) {
+			if(line[0] == '+') {
+			} else if(0 != (rc = (const char*)memchr(line, ':', ll))) {
 				std::string enct(rc+1, ll - (rc-line) - 1);
 				ic = (const char*)memchr(line, ',', rc-line);
 				if(!ic) ic = rc;
 				do {
-					std::string item(line, ic-line);
+					std::string item;
+					stringlower(item, line, ic-line);
 					hashentry<isfreg> *hte;
 					hte = cisf.reght.lookup(item.data(), item.length());
 					WV_DEBUG("ISF: %s :\"%s\"\n", item.c_str(), enct.c_str());
@@ -797,6 +982,17 @@ int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 					ic = (const char*)memchr(line, ',', rc-line);
 					if(!ic) ic = rc;
 				} while(line < rc);
+			} else {
+				std::string item;
+				std::string enct;
+				stringlower(item, line, ll);
+				if(item.length() < 1) break;
+				hashentry<isfreg> *hte;
+				hte = cisf.reght.lookup(item.data(), item.length());
+				isfreg io(secname, enct);
+				if(!hte) {
+					cisf.reght.set(item.data(), item.length(), io);
+				}
 			}
 			break;
 		case 4:
@@ -817,12 +1013,25 @@ int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 				mode = 0;
 				break;
 			}
-			if(0 != (rc = (const char*)memchr(line, ':', ll))) {
+			if(line[0] == '+') {
+			} else if(0 != (rc = (const char*)memchr(line, ':', ll))) {
 				std::string enct(rc+1, ll - (rc-line) - 1);
-				std::string item(line, rc-line);
+				std::string item;
+				stringlower(item, line, rc-line);
 				hashentry<isfkey> *hte;
 				hte = cisf.keyht.lookup(item.data(), item.length());
 				WV_DEBUG("ISF: %s :\"%s\"\n", item.c_str(), enct.c_str());
+				isfkey io(secname, enct);
+				if(!hte) {
+					cisf.keyht.set(item.data(), item.length(), io);
+				}
+			} else {
+				std::string item;
+				std::string enct;
+				stringlower(item, line, ll);
+				if(item.length() < 1) break;
+				hashentry<isfkey> *hte;
+				hte = cisf.keyht.lookup(item.data(), item.length());
 				isfkey io(secname, enct);
 				if(!hte) {
 					cisf.keyht.set(item.data(), item.length(), io);
@@ -860,6 +1069,7 @@ int wva_assemble(wvat_state st, wvat_obj *ob, char *atxt, size_t len)
 	wave::assemblystate *fst = new wave::assemblystate();
 	fst->files.push_back(wave::assemblyfile(atxt, len));
 	wva_lex(st, fst, atxt, len);
+	wva_parse(st, fst, atxt, len);
 	delete fst;
 	return 0;
 }
