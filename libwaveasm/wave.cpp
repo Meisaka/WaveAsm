@@ -521,6 +521,12 @@ struct astkn {
 	int tkn;
 };
 
+struct aspos {
+	size_t file;
+	size_t line;
+	size_t off;
+};
+
 struct assym {
 	size_t start;
 	size_t file;
@@ -547,6 +553,7 @@ struct assemblystate {
 	size_t cline;
 	size_t cchar;
 	size_t errc;
+	size_t llfile;
 	std::vector<assemblyfile*> files;
 	wave::arrayhash<assym> symbols;
 
@@ -554,6 +561,7 @@ struct assemblystate {
 		cfile = 0;
 		cline = 0;
 		cchar = 0;
+		llfile = 0;
 		errc = 0;
 	}
 	~assemblystate() {
@@ -705,6 +713,8 @@ enum WVA_EVAL_TOKEN {
 #define ETKN_MIN_VAL 3
 #define ETKN_MAX_VAL 5
 
+#define WV_MACRO_INCLUDE 1
+
 #define DEBUG_PARSE(x...) WV_DEBUG(x)
 //#define DEBUG_EVAL(x...) WV_DEBUG(x)
 #define DEBUG_EVAL(x...)
@@ -790,11 +800,47 @@ static int wva_error(wave::assemblystate *ast, const char *argf, const char *msg
 	va_list va;
 	ast->errc++;
 	va_start(va, msgfmt);
-	size_t ls = ast->files[ast->cfile]->lines[ast->cline].lstart;
-	fprintf(stderr, "%d:%ld:%ld: Error: ", ast->cfile, ast->cline+1, ast->cchar-ls);
+	wave::assemblyline &cl = ast->files[ast->cfile]->lines[ast->cline];
+	size_t ls = cl.lstart;
+	size_t ll = 0;
+	size_t lc = ast->cchar - ls;
+	if(cl.tkn.size() > 0) {
+		ll = cl.tkn.back().start - ls;
+	}
+	fprintf(stderr, "\n%d:%ld:*: %s\n", ast->cfile, ast->cline+1, ast->files[ast->cfile]->src.substr(ls, ll).c_str());
+	fprintf(stderr, "%d:%ld:*: ", ast->cfile, ast->cline+1);
+	for(size_t z = 0; z < lc; z++) fputc(' ', stderr);
+	fputc('^', stderr); fputc(10, stderr);
+	fprintf(stderr, "%d:%ld:%ld: Error: ", ast->cfile, ast->cline+1, lc);
 	vfprintf(stderr, msgfmt, va);
 	fputc(10, stderr);
 	va_end(va);
+	return 0;
+}
+
+static int wva_loadfile(wvat_state wvst, wave::assemblystate *ast, const char * fname, int search)
+{
+	size_t svfn = ast->cfile;
+	size_t svfl = ast->cline;
+	size_t size = 0;
+	char *data;
+	if(wvst->onload) {
+		if(wvst->onload(fname, search, &data, &size, wvst->onload_usr)) {
+			wva_error(ast, "%s", "failed to load file \"%s\"", fname);
+			return -1;
+		}
+		ast->cline = 0;
+		ast->cfile = ast->files.size();
+		ast->llfile = ast->cfile;
+		ast->files.push_back(new wave::assemblyfile(data, size));
+		wva_lex(wvst, ast, data, size);
+		wva_free(data);
+	} else {
+		wva_error(ast, "%s", "Can not load file \"%s\" - no load function defined", fname);
+		return -1;
+	}
+	ast->cfile = svfn;
+	ast->cline = svfl;
 	return 0;
 }
 
@@ -808,11 +854,26 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 	ast->errc = 0;
 	assemblyfile *cf;
 	if(!ast->files.size()) return 0;
+	bool loadfile = false;
+	std::vector<aspos> filestack;
 	cf = ast->files[ast->cfile];
-	const char *text = cf->src.data();
 	// early processing pass
-	for(size_t fl = 0; fl < cf->lines.size(); fl++) {
+	for(size_t fl = 0; loadfile || filestack.size() || fl < cf->lines.size(); fl++) {
+		if(loadfile) {
+			filestack.push_back({ast->cfile, fl, 0});
+			ast->cfile = ast->llfile;
+			fl = 0;
+			cf = ast->files[ast->cfile];
+			loadfile = 0;
+		}
+		if(filestack.size() && !(fl < cf->lines.size())) {
+			ast->cfile = filestack.back().file;
+			fl = ast->cline = filestack.back().line;
+			cf = ast->files[ast->cfile];
+			filestack.pop_back();
+		}
 		assemblyline &cl = cf->lines[fl];
+		const char *text = cf->src.data();
 		ast->cline = fl;
 		DEBUG_PARSE("f%d:l%d:", ast->cfile, ast->cline+1);
 		int ulabel = 0;
@@ -820,6 +881,7 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 		std::vector<wva_teval> estack;
 		std::vector<wva_teval> cstack;
 		int letkn = 0;
+		int macro = 0;
 		for(int i = 0; i < cl.tkn.size(); i++) {
 			astkn &ctkn = cl.tkn[i];
 			ast->cchar = ctkn.start;
@@ -835,7 +897,7 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 				mmm.assign(text+ctkn.start, ctkn.len);
 				if(!hte) {
 					if(ulabel) {
-						wva_error(ast, "%s", "Undefined symbol: %s", mmm.c_str());
+						//wva_error(ast, "%s", "Undefined symbol: %s", mmm.c_str());
 					}
 				} else {
 					DEBUG_PARSE("IDENT ");
@@ -851,7 +913,7 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 					char ctxt = *(text+ast->cchar);
 					rval *= 10;
 					if(ctxt >= '0' && ctxt <= '9') rval += ctxt - '0';
-					else wva_error(ast, 0, "DECNUM-ERR-INVALID-CHAR");
+					else wva_error(ast, 0, "DECNUM-ERR-INVALID-CHAR:'%c'", ctxt);
 				}
 				DEBUG_EVAL("DECNUMv=%lu ", rval);
 				estack.push_back({i,ETKN_CONST,rval});
@@ -1056,6 +1118,10 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 					}
 					std::string ifile(text+ctkn.start+si, i-si);
 					DEBUG_PARSE("FOUND INCLUDE [%s]", ifile.c_str());
+					if(wva_loadfile(wvst, ast, ifile.c_str(), incs == '<'? 1:0)) {
+						return -1;
+					}
+					loadfile = true;
 				}
 				break;
 			case TKN_ELINE:
@@ -1080,6 +1146,27 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 				} else {
 					wva_error(ast, "%s", "duplicate symbol: %s", mmm.c_str());
 					//wva_error(hte->data->file, hte->data->line, "previous definition here.");
+				}
+				break;
+			case TKN_STRING:
+				if(!macro) {
+					wva_error(ast, 0, "Unexpected string");
+					break;
+				}
+				if(macro == WV_MACRO_INCLUDE) {
+					std::string ifile(text+ctkn.start + 1, ctkn.len - 2);
+					DEBUG_PARSE("MINCLUDE [%s] ", ifile.c_str());
+					if(wva_loadfile(wvst, ast, ifile.c_str(), 0)) {
+						return -1;
+					}
+					loadfile = true;
+				}
+				break;
+			case TKN_MACRO:
+				if(ctkn.len == 8 && 0 == strncmp(text+ctkn.start, ".include", 8)) {
+					macro = WV_MACRO_INCLUDE;
+				} else {
+					macro = -1;
 				}
 				break;
 			case TKN_COMMA:

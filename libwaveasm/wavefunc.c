@@ -15,10 +15,13 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "wavefunc.h"
+#include <string.h>
 
 void * wva_alloc(size_t s)
 {
-	return malloc(s);
+	void * n = malloc(s);
+	if(n) memset(n, 0, s);
+	return n;
 }
 
 void * wva_realloc(void *p, size_t s)
@@ -29,5 +32,10 @@ void * wva_realloc(void *p, size_t s)
 void wva_free(void *p)
 {
 	free(p);
+}
+
+char * wva_alloc_file(size_t s)
+{
+	return (char*)wva_alloc(s);
 }
 

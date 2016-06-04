@@ -12,11 +12,23 @@
 
 #include "bits.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* allocate functions for loading file */
+char * wva_alloc_file(size_t);
+
+/* load file, allocate "data" with wva_alloc_file, the assembler will free automatically when done. */
+typedef int (*wva_loadfilecallback)(const char *file, int search, char **data, size_t *datalen, void * usr);
+
 typedef
 struct wvas_state {
 	void *in_state;
 	void *isf_state;
 	void *lc_state;
+	wva_loadfilecallback onload;
+	void *onload_usr;
 } *wvat_state;
 
 typedef
@@ -24,9 +36,6 @@ struct wvas_obj {
 	size_t len;
 } *wvat_obj;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 /* create and destroy WaveAsm instances */
 int wva_allocstate(wvat_state *);
 int wva_freestate(wvat_state);
