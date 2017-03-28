@@ -17,7 +17,18 @@
 #include <stdio.h>
 #include "wave.h"
 
-#define RDCHUNK 1024
+static int load_file_callback(const char *file, int search, char **data, size_t *datalen, void * usr)
+{
+	FILE *f = fopen(file, "r");
+	if(!f) return -1;
+	fseek(f, 0, SEEK_END);
+	off_t sz = ftello(f);
+	fseek(f, 0, SEEK_SET);
+	*data = wva_alloc_file(sz);
+	*datalen = fread(*data, 1, sz, f);
+	fclose(f);
+	return 0;
+}
 
 // fn = file name
 // rsptr is caller freed if set by this function
@@ -34,30 +45,18 @@ static int load_file(char * fn, char **rsptr, size_t *rssz) {
 		perror("file open");
 		return -1;
 	}
-	size_t rdlen = RDCHUNK;
+	size_t rdlen;
+	fseek(f, 0, SEEK_END);
+	rdlen = ftello(f);
+	fseek(f, 0, SEEK_SET);
 	size_t flen = 0;
 	char *ft = (char*)malloc(rdlen);
-	void *np;
 	if(!ft) {
 		perror("malloc");
 		fclose(f);
 		return -1;
 	}
-	int c;
-	while((c = fgetc(f)) != EOF) {
-		if(flen >= rdlen) {
-			np = realloc(ft, rdlen + RDCHUNK);
-			if(!np) {
-				perror("file read: realloc");
-				free(ft);
-				fclose(f);
-				return -1;
-			}
-			ft = (char*)np;
-			rdlen += RDCHUNK;
-		}
-		ft[flen++] = (char)c;
-	}
+	flen = fread(ft, 1, rdlen, f);
 	fclose(f);
 	fprintf(stderr, "Read: %d bytes\n", flen);
 	*rsptr = ft;
@@ -74,7 +73,9 @@ int main(int argc, char* argv[], char** env)
 	size_t xl = 0;
 	if(argc > 1) {
 		wva_allocstate(&wave);
-		if(load_file("tr3200.isf", &isf, &xl)) {
+		wave->onload = load_file_callback;
+		if(load_file("dcpu16.isf", &isf, &xl)) {
+		//if(load_file("tr3200.isf", &isf, &xl)) {
 			return 2;
 		}
 		wva_loadisf(wave, isf, xl);

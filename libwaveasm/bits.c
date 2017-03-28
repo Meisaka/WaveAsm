@@ -120,7 +120,7 @@ int wva_write_bits_le(WVT_Bitset v, uint8_t *buf, size_t sz)
 	uint32_t m, sa;
 	uint8_t q;
 	int i, k, r;
-	if(v == 0) return;
+	if(v == 0) return 0;
 	blocks = (v->nbits - 1) >> 5;
 	m = 0;
 	q = 0;
@@ -158,7 +158,7 @@ int wva_write_bits_be(WVT_Bitset v, uint8_t *buf, size_t sz)
 	uint32_t m, sa;
 	uint8_t q;
 	int i, k;
-	if(v == 0) return;
+	if(v == 0) return 0;
 	blocks = (v->nbits - 1) >> 5;
 	m = v->nbits - 1;
 	q = 0;

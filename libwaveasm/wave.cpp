@@ -496,6 +496,7 @@ struct isfreg {
 		WV_DEBUG(" <\n");
 	}
 };
+
 struct isfkey {
 	std::string fmt;
 	datstring enc;
@@ -528,13 +529,30 @@ struct aspos {
 };
 
 struct assym {
-	size_t start;
+	struct aspos loc;
+};
+struct asdefine {
 	size_t file;
+	size_t line;
+	size_t stkn;
+	size_t etkn;
+};
+
+struct isfmacro {
+	datstring enc;
+	std::basic_string<astkn> tkn;
+};
+
+struct wva_teval {
+	int index;
+	int etkn;
+	uint64_t val;
 };
 
 struct assemblyline {
 	size_t lstart;
 	std::basic_string<astkn> tkn;
+	std::vector<wva_teval> ev;
 	assemblyline(size_t s) {
 		lstart = s;
 	}
@@ -556,6 +574,7 @@ struct assemblystate {
 	size_t llfile;
 	std::vector<assemblyfile*> files;
 	wave::arrayhash<assym> symbols;
+	wave::arrayhash<asdefine> defines;
 
 	assemblystate() {
 		cfile = 0;
@@ -577,6 +596,7 @@ struct isfdata {
 	wave::arrayhash<std::vector<isfopcode>> opht;
 	wave::arrayhash<isfreg> reght;
 	wave::arrayhash<isfkey> keyht;
+	wave::arrayhash<isfmacro> macroht;
 	std::vector<isflit> litv;
 };
 
@@ -691,17 +711,15 @@ static void diag_color(const char * txt, size_t s, size_t e, int tk) {
 	fprintf(stderr, "\e[0m");
 }
 
-struct wva_teval {
-	int index;
-	int etkn;
-	uint64_t val;
-};
-
 enum WVA_EVAL_TOKEN {
+	ETKN_PTKN = 0,
+	ETKN_PRESTKN = 1,
 	ETKN_LPAREN = 2,
 	ETKN_RPAREN = 3,
 	ETKN_IDENT = 4,
 	ETKN_CONST = 5,
+	ETKN_REGKW = 6,
+	ETKN_MODKW = 7,
 	ETKN_ADD = 10,
 	ETKN_SUB = 11,
 	ETKN_MUL = 12,
@@ -715,13 +733,30 @@ enum WVA_EVAL_TOKEN {
 
 #define WV_MACRO_INCLUDE 1
 
-#define DEBUG_PARSE(x...) WV_DEBUG(x)
-//#define DEBUG_EVAL(x...) WV_DEBUG(x)
-#define DEBUG_EVAL(x...)
+#define ENABLE_DEBUG_PARSE   1
+#define ENABLE_DEBUG_EVAL_S  1
+#define ENABLE_DEBUG_EVAL    1
 
-static void show_stack(std::vector<wva_teval> &stk) {
+#if ENABLE_DEBUG_PARSE == 1
+#define DEBUG_PARSE(x...) WV_DEBUG(x)
+#else
+#define DEBUG_PARSE(x...)
+#endif
+#if ENABLE_DEBUG_EVAL_S == 1
+#define DEBUG_EVAL_S(x) x
+#else
+#define DEBUG_EVAL_S(x)
+#endif
+#define DEBUG_LEX(x)
+#if ENABLE_DEBUG_EVAL == 1
+#define DEBUG_EVAL(x...) WV_DEBUG(x)
+#else
+#define DEBUG_EVAL(x...)
+#endif
+
+static void show_stack(std::vector<wave::wva_teval> &stk) {
 	char ft;
-	DEBUG_EVAL("S<");
+	WV_DEBUG("S<");
 	for(int i = 0; i < stk.size(); i++) {
 		switch(stk.at(i).etkn) {
 		case ETKN_ADD: ft = '+'; break;
@@ -733,55 +768,58 @@ static void show_stack(std::vector<wva_teval> &stk) {
 		case ETKN_RPAREN: ft = ')'; break;
 		case ETKN_CONST: ft = 'N'; break;
 		case ETKN_IDENT: ft = 'I'; break;
+		case ETKN_REGKW: ft = 'R'; break;
+		case ETKN_MODKW: ft = 'K'; break;
 		default:
 			ft = '?';
 		}
-		DEBUG_EVAL("%c", ft);
+		WV_DEBUG("%c", ft);
 	}
-	DEBUG_EVAL("> ");
+	WV_DEBUG("> ");
 }
 
-static int eval_stack(std::vector<wva_teval> &stk)
+static int eval_stack(std::vector<wave::wva_teval> &stk)
 {
+	using wave::wva_teval;
 	if(stk.empty()) return 0;
 	size_t ss = stk.size();
 	switch(stk.back().etkn) {
 	case ETKN_ADD:
 		if(ss < 3) return -1;
-		if(stk.at(ss - 3).etkn == 5 && stk.at(ss - 2).etkn == 5) {
+		if(stk.at(ss - 3).etkn == ETKN_CONST && stk.at(ss - 2).etkn == ETKN_CONST) {
 			wva_teval &sl = stk[ss-3];
 			wva_teval &sr = stk[ss-2];
 			sl.val = sl.val + sr.val;
 			if(sr.index > sl.index) sl.index = sr.index;
 			stk.pop_back();
 			stk.pop_back();
-		}
+		} else return 1;
 		break;
 	case ETKN_SUB:
 		if(ss < 3) return -1;
-		if(stk.at(ss - 3).etkn == 5 && stk.at(ss - 2).etkn == 5) {
+		if(stk.at(ss - 3).etkn == ETKN_CONST && stk.at(ss - 2).etkn == ETKN_CONST) {
 			wva_teval &sl = stk[ss-3];
 			wva_teval &sr = stk[ss-2];
 			sl.val = sl.val - sr.val;
 			if(sr.index > sl.index) sl.index = sr.index;
 			stk.pop_back();
 			stk.pop_back();
-		}
+		} else return 1;
 		break;
 	case ETKN_MUL:
 		if(ss < 3) return -1;
-		if(stk.at(ss - 3).etkn == 5 && stk.at(ss - 2).etkn == 5) {
+		if(stk.at(ss - 3).etkn == ETKN_CONST && stk.at(ss - 2).etkn == ETKN_CONST) {
 			wva_teval &sl = stk[ss-3];
 			wva_teval &sr = stk[ss-2];
 			sl.val = sl.val * sr.val;
 			if(sr.index > sl.index) sl.index = sr.index;
 			stk.pop_back();
 			stk.pop_back();
-		}
+		} else return 1;
 		break;
 	case ETKN_DIV:
 		if(ss < 3) return -1;
-		if(stk.at(ss - 3).etkn == 5 && stk.at(ss - 2).etkn == 5) {
+		if(stk.at(ss - 3).etkn == ETKN_CONST && stk.at(ss - 2).etkn == ETKN_CONST) {
 			wva_teval &sl = stk[ss-3];
 			wva_teval &sr = stk[ss-2];
 			if(!sr.val) return -1;
@@ -789,7 +827,7 @@ static int eval_stack(std::vector<wva_teval> &stk)
 			if(sr.index > sl.index) sl.index = sr.index;
 			stk.pop_back();
 			stk.pop_back();
-		}
+		} else return 1;
 		break;
 	}
 	return 0;
@@ -812,6 +850,24 @@ static int wva_error(wave::assemblystate *ast, const char *argf, const char *msg
 	for(size_t z = 0; z < lc; z++) fputc(' ', stderr);
 	fputc('^', stderr); fputc(10, stderr);
 	fprintf(stderr, "%d:%ld:%ld: Error: ", ast->cfile, ast->cline+1, lc);
+	vfprintf(stderr, msgfmt, va);
+	fputc(10, stderr);
+	va_end(va);
+	return 0;
+}
+
+static int wva_info(wave::assemblystate *ast, struct wave::aspos &loc, const char *argf, const char *msgfmt, ...)
+{
+	va_list va;
+	va_start(va, msgfmt);
+	wave::assemblyline &cl = ast->files[loc.file]->lines[loc.line];
+	size_t ls = cl.lstart;
+	size_t ll = 0;
+	if(cl.tkn.size() > 0) {
+		ll = cl.tkn.back().start - ls;
+	}
+	fprintf(stderr, "\n%d:%ld:*: %s\n", loc.file, loc.line+1, ast->files[loc.file]->src.substr(ls, ll).c_str());
+	fprintf(stderr, "%d:%ld: Notice: ", loc.file, loc.line+1);
 	vfprintf(stderr, msgfmt, va);
 	fputc(10, stderr);
 	va_end(va);
@@ -878,8 +934,8 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 		DEBUG_PARSE("f%d:l%d:", ast->cfile, ast->cline+1);
 		int ulabel = 0;
 		uint64_t rval;
-		std::vector<wva_teval> estack;
-		std::vector<wva_teval> cstack;
+		std::vector<wave::wva_teval> estack;
+		std::vector<wave::wva_teval> cstack;
 		int letkn = 0;
 		int macro = 0;
 		for(int i = 0; i < cl.tkn.size(); i++) {
@@ -899,11 +955,18 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 					if(ulabel) {
 						//wva_error(ast, "%s", "Undefined symbol: %s", mmm.c_str());
 					}
-				} else {
-					DEBUG_PARSE("IDENT ");
+					DEBUG_PARSE("P.IDENT ");
 					estack.push_back({i,ETKN_IDENT,0});
 					letkn = ETKN_IDENT;
-					// show_stack(estack); DEBUG_EVAL("\n");
+				} else {
+					DEBUG_PARSE("P.IDENT ");
+					estack.push_back({i,ETKN_IDENT,0});
+					letkn = ETKN_IDENT;
+					// show_stack(estack);
+				}
+				if(!cstack.empty() && cstack.back().etkn == ETKN_NEG) {
+					DEBUG_PARSE("NEG-LABEL ");
+					cstack.pop_back();
 				}
 				break;
 			case TKN_DECNUM:
@@ -915,7 +978,7 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 					if(ctxt >= '0' && ctxt <= '9') rval += ctxt - '0';
 					else wva_error(ast, 0, "DECNUM-ERR-INVALID-CHAR:'%c'", ctxt);
 				}
-				DEBUG_EVAL("DECNUMv=%lu ", rval);
+				DEBUG_EVAL("P.DECNUMv=%lu ", rval);
 				estack.push_back({i,ETKN_CONST,rval});
 				if(!cstack.empty() && cstack.back().etkn == ETKN_NEG) {
 					wva_teval &inv = estack.back();
@@ -935,7 +998,7 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 					else if(ctxt >= 'a' && ctxt <= 'f') rval += 10 + (ctxt - 'A');
 					else wva_error(ast, 0, "HEXNUM-ERR-INVALID-CHAR");
 				}
-				DEBUG_EVAL("HEXNUMv=%lu ", rval);
+				DEBUG_EVAL("P.HEXNUMv=%lu ", rval);
 				estack.push_back({i,ETKN_CONST,rval});
 				if(!cstack.empty() && cstack.back().etkn == ETKN_NEG) {
 					wva_teval &inv = estack.back();
@@ -953,7 +1016,7 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 					if(ctxt >= '0' && ctxt <= '7') rval += ctxt - '0';
 					else wva_error(ast, 0, "OCTNUM-ERR-INVALID-CHAR");
 				}
-				DEBUG_EVAL("OCTNUMv=%lu ", rval);
+				DEBUG_EVAL("P.OCTNUMv=%lu ", rval);
 				estack.push_back({i,ETKN_CONST,rval});
 				if(!cstack.empty() && cstack.back().etkn == ETKN_NEG) {
 					wva_teval &inv = estack.back();
@@ -971,7 +1034,7 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 					if(ctxt >= '0' && ctxt <= '1') rval += ctxt - '0';
 					else wva_error(ast, 0, "BINNUM-ERR-INVALID-CHAR");
 				}
-				DEBUG_EVAL("BINNUMv=%lu ", rval);
+				DEBUG_EVAL("P.BINNUMv=%lu ", rval);
 				estack.push_back({i,ETKN_CONST,rval});
 				if(!cstack.empty() && cstack.back().etkn == ETKN_NEG) {
 					wva_teval &inv = estack.back();
@@ -986,7 +1049,7 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 					if(ctxt == '\\') {
 						ctxt = (uint8_t)*(text+ctkn.start+2);
 					}
-					DEBUG_EVAL("CHARNUMv=%u ", ctxt);
+					DEBUG_EVAL("P.CHARNUMv=%u ", ctxt);
 					estack.push_back({i,ETKN_CONST,ctxt});
 				}
 				if(!cstack.empty() && cstack.back().etkn == ETKN_NEG) {
@@ -1032,12 +1095,12 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 				}
 				cstack.push_back({i,etype,0});
 				letkn = etype;
-				//show_stack(estack); show_stack(cstack); DEBUG_EVAL("\n");
+				DEBUG_EVAL_S(show_stack(estack); show_stack(cstack);)
 				break;
 			case TKN_LPAREN:
 				DEBUG_EVAL("P( ");
 				cstack.push_back({i,ETKN_LPAREN,0});
-				//show_stack(estack); DEBUG_EVAL("\n");
+				DEBUG_EVAL_S(show_stack(estack);)
 				letkn = ETKN_LPAREN;
 				break;
 			case TKN_RPAREN:
@@ -1057,8 +1120,21 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 					}
 				}
 				if(!etype) wva_error(ast, 0, "RPAREN ERROR!");
-				show_stack(estack); show_stack(cstack);
+				DEBUG_EVAL_S(show_stack(estack); show_stack(cstack));
 				letkn = ETKN_RPAREN;
+				break;
+			case TKN_REG:
+				estack.push_back({i,ETKN_REGKW,0});
+				DEBUG_EVAL("P.REG ");
+				show_stack(estack); show_stack(cstack);
+				letkn = TKN_IDENT;
+				break;
+			case TKN_KEYWORD:
+				if(!letkn) break;
+				estack.push_back({i,ETKN_MODKW,0});
+				DEBUG_EVAL("P.KEYW ");
+				show_stack(estack); show_stack(cstack);
+				letkn = TKN_IDENT;
 				break;
 			default:
 				if(!cstack.empty()) {
@@ -1071,22 +1147,38 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 							wva_error(ast, 0, "EVAL-IMM-ERR");
 						}
 					}
-					show_stack(estack); show_stack(cstack);
+					DEBUG_EVAL_S(show_stack(estack); show_stack(cstack));
 				}
 				if(!estack.empty()) {
-					DEBUG_PARSE("F-NUM ");
-					show_stack(estack);
+					DEBUG_PARSE("EVAL-RES ");
+					DEBUG_EVAL_S(show_stack(estack));
+					DEBUG_EVAL_S(show_stack(cstack));
 					int nnums = 0;
 					int nops = 0;
 					int e;
-					for(int i = 0; i < estack.size(); i++) {
-						e = estack.at(i).etkn;
+					for(int k = 0; k < estack.size(); k++) {
+						cl.ev.push_back(estack[k]);
+						e = estack.at(k).etkn;
 						DEBUG_EVAL("E%d.", e);
 						if(e >= ETKN_MIN_OP && e <= ETKN_MAX_OP) {
 							nops++;
+						} else if(e == ETKN_IDENT) {
+							astkn &ftkn = cl.tkn[estack.at(k).index];
+							mmm.assign(text+ftkn.start, ftkn.len);
+							nnums++;
+							DEBUG_EVAL("n=%s v=%lx ", mmm.c_str(), estack.at(k).val);
 						} else if(e >= ETKN_MIN_VAL && e <= ETKN_MAX_VAL) {
 							nnums++;
-							DEBUG_EVAL("v=%lx ", estack.at(i).val);
+							DEBUG_EVAL("v=%lx ", estack.at(k).val);
+						} else if(e == ETKN_MODKW) {
+							astkn &ftkn = cl.tkn[estack.at(k).index];
+							mmm.assign(text+ftkn.start, ftkn.len);
+							DEBUG_EVAL("k=%s ", mmm.c_str());
+						} else if(e == ETKN_REGKW) {
+							astkn &ftkn = cl.tkn[estack.at(k).index];
+							mmm.assign(text+ftkn.start, ftkn.len);
+							nnums++;
+							DEBUG_EVAL("r=%s ", mmm.c_str());
 						} else {
 							wva_error(ast, 0, "EXPR CONTENT ERROR!");
 						}
@@ -1094,7 +1186,8 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 					if(nops + 1 != nnums) {
 						wva_error(ast, 0, "EXPR SYNTAX ERROR!");
 					}
-					DEBUG_EVAL("\n");
+					cl.ev.push_back({0,ETKN_PRESTKN,0});
+					DEBUG_EVAL("EVAL-END\n");
 					estack.clear();
 					cstack.clear();
 				}
@@ -1104,25 +1197,40 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 			/* Resolve parsing */
 			switch(ctkn.tkn) {
 			case TKN_WS:
-				if(!i && ctkn.len > 11 && 0 == strncmp(text+ctkn.start, "#include ", 9)) {
+				break;
+			case TKN_HASH:
+				if(!i && ctkn.len == 8 && 0 == strncmp(text+ctkn.start, "#include", 8)) {
 					int ince = 0;
-					int incs = text[ctkn.start+9];
-					int si = 10;
-					if(incs == '<') ince = '>';
-					else if(incs == '"') ince = '"';
-					else if(incs == '\'') ince = '\'';
-					else { ince = ' '; si = 9; }
-					int i = si;
-					while(i < ctkn.len && text[ctkn.start+i] != ince) {
+					int incs = 0;
+					int si = 0;
+					while((!incs || !ince) && i < cl.tkn.size()) {
+						switch(cl.tkn[i].tkn) {
+						case TKN_LESS:
+							incs = cl.tkn[i].start+1;
+							si = 1;
+							break;
+						case TKN_GRTR:
+							ince = cl.tkn[i].start;
+							break;
+						case TKN_STRING:
+							incs = cl.tkn[i].start + 1;
+							ince = incs + cl.tkn[i].len - 2;
+							break;
+						}
 						i++;
 					}
-					std::string ifile(text+ctkn.start+si, i-si);
+					if(!incs || !ince) break;
+					std::string ifile(text+incs, ince-incs);
 					DEBUG_PARSE("FOUND INCLUDE [%s]", ifile.c_str());
-					if(wva_loadfile(wvst, ast, ifile.c_str(), incs == '<'? 1:0)) {
+					if(wva_loadfile(wvst, ast, ifile.c_str(), si)) {
 						return -1;
 					}
 					loadfile = true;
+					break;
 				}
+				while(cl.tkn[i].tkn != TKN_ELINE && i < cl.tkn.size()) {
+					i++;
+				} i--;
 				break;
 			case TKN_ELINE:
 				DEBUG_PARSE("EOL");
@@ -1132,7 +1240,7 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 					// make an identifier on the beginning of lines a label
 					if(!ulabel) {
 						ctkn.tkn = TKN_LABEL;
-						ast->symbols.set(text+ctkn.start, ctkn.len, {ctkn.start,ast->cfile});
+						ast->symbols.set(text+ctkn.start, ctkn.len, {ast->cfile,ast->cline,ctkn.start});
 						DEBUG_PARSE("SLABEL ");
 					}
 				}
@@ -1141,11 +1249,11 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 				hte = ast->symbols.lookup(text+ctkn.start, ctkn.len);
 				mmm.assign(text+ctkn.start, ctkn.len);
 				if(!hte) {
-					ast->symbols.set(text+ctkn.start, ctkn.len, {ctkn.start,ast->cfile});
+					ast->symbols.set(text+ctkn.start, ctkn.len, {ast->cfile,ast->cline,ctkn.start});
 					DEBUG_PARSE("MLABEL ");
 				} else {
 					wva_error(ast, "%s", "duplicate symbol: %s", mmm.c_str());
-					//wva_error(hte->data->file, hte->data->line, "previous definition here.");
+					wva_info(ast, hte->data->loc, NULL, "previous definition here.");
 				}
 				break;
 			case TKN_STRING:
@@ -1171,6 +1279,7 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 				break;
 			case TKN_COMMA:
 				DEBUG_PARSE("COMMA ");
+				cl.ev.push_back({i,ETKN_PTKN,ctkn.tkn});
 				break;
 			case TKN_DECNUM:
 			case TKN_HEXNUM:
@@ -1204,14 +1313,18 @@ static int wva_parse(wvat_state wvst, wave::assemblystate *ast)
 				break;
 			case TKN_LBRACK:
 				DEBUG_PARSE("SYM[ ");
+				cl.ev.push_back({i,ETKN_PTKN,ctkn.tkn});
 				break;
 			case TKN_RBRACK:
 				DEBUG_PARSE("SYM] ");
+				cl.ev.push_back({i,ETKN_PTKN,ctkn.tkn});
 				break;
 			case TKN_KEYWORD:
+				if(letkn) break;
 				DEBUG_PARSE("KEYW ");
 				break;
 			case TKN_REG:
+				if(letkn) break;
 				DEBUG_PARSE("REG ");
 				break;
 			case TKN_OPCODE:
@@ -1243,6 +1356,7 @@ void lex_add_token(void * state, void *fs, const char * text, size_t s, size_t e
 	hashentry<std::vector<isfopcode>> *hto;
 	hashentry<isfkey> *htk;
 	hashentry<isfreg> *htr;
+	hashentry<isfmacro> *htm;
 	while(cf->lines.size() <= ast->cline) {
 		cf->lines.push_back(assemblyline(s));
 	}
@@ -1264,21 +1378,23 @@ void lex_add_token(void * state, void *fs, const char * text, size_t s, size_t e
 	case TKN_CENT:
 	case TKN_MACRO:
 	case TKN_LABEL:
-		if((hto = st.opht.lookup(mmm.data(), mmm.length()))) {
+		if((htm = st.macroht.lookup(mmm.data(), mmm.length()))) {
+			tk = TKN_MACRO;
+		} else if((hto = st.opht.lookup(mmm.data(), mmm.length()))) {
 			tk = TKN_OPCODE;
 		} else if((htr = st.reght.lookup(mmm.data(), mmm.length()))) {
 			tk = TKN_REG;
 		} else if((htk = st.keyht.lookup(mmm.data(), mmm.length()))) {
 			tk = TKN_KEYWORD;
 		}
-		diag_color(mmm.c_str(),0,e-s,tk);
+		DEBUG_LEX(diag_color(mmm.c_str(),0,e-s,tk));
 		break;
 	case TKN_ELINE:
 		ast->cline++;
-		fprintf(stderr,"\n");
+		DEBUG_LEX(WVA_DEBUG("\n"));
 		break;
 	default:
-		diag_color(text,s,e,tk);
+		DEBUG_LEX(diag_color(text,s,e,tk));
 		break;
 	}
 	cl->tkn.push_back({s,e-s,tk});
@@ -1337,6 +1453,9 @@ int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 			} else if(strneq(line, ll, "<GROUP>", 7)) {
 				WV_DEBUG("GROUP section\n");
 				mode = 6;
+			} else if(strneq(line, ll, "<MACRO>", 7)) {
+				WV_DEBUG("MACRO section\n");
+				mode = 7;
 			}
 			break;
 		case 1:
@@ -1467,6 +1586,30 @@ int wva_loadisf(wvat_state st, char *isftxt, size_t isflen)
 				WV_DEBUG("End GROUP section\n");
 				mode = 0;
 				break;
+			}
+			break;
+		case 7:
+			if(strneq(line, ll, "</MACRO>", 8)) {
+				WV_DEBUG("End MACRO section\n");
+				mode = 0;
+				break;
+			}
+			if(0 != (rc = (const char*)memchr(line, ':', ll))) {
+				std::string item;
+				stringlower(item, line, rc-line);
+				hashentry<isfmacro> *hte;
+				hte = cisf.macroht.lookup(item.data(), item.length());
+				WV_DEBUG("ISF-MACRO: \"%s\"\n", item.c_str());
+				isfmacro io;
+				if(!hte) {
+					cisf.macroht.set(item.data(), item.length(), io);
+				}
+			} else {
+				std::string item;
+				std::string enct;
+				stringlower(item, line, ll);
+				if(item.length() < 1) break;
+				WV_DEBUG("MACRO ENT: %s\n", item.c_str());
 			}
 			break;
 		default:

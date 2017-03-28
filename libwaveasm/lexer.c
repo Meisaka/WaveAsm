@@ -206,7 +206,7 @@ struct lex_ctl {
 static struct lex_ctl wvtr[] = {
 	{0, 0, 0},
 	{1, 0, TKWS, -2},
-	{0, 0, TKHASH},
+	{28, 2, TKHASH, -2},
 	{28, 2, TKL},
 	{30, 3, TKDEC, -2},
 	{0, 0, TKBANG}, // 5
@@ -271,7 +271,7 @@ int wva_lex(void * wvas, void *fs, char * text, size_t len) {
 	while(i <= len) {
 		cc = i == len ? 32 : (uint8_t)text[i];
 		if(col == 0) {
-			fprintf(stderr, "Line %d:", line);
+			LEXDEBUG(fprintf(stderr, "Line %d:", line));
 		}
 		trsc = sttab[lc][cc];
 		if(!trsc) {
@@ -320,12 +320,13 @@ int wva_lex(void * wvas, void *fs, char * text, size_t len) {
 			}
 			LEXDEBUG(fputc(cc, stderr);)
 		}
+		/*
 		if(!cif && cc == '#') { // # at beginning of lines as comments
 			mo = 25;
 			trsc = 25;
 			mtkn = 1;
 			lc = wvtr[trsc].nlc;
-		}
+		}*/
 		col++;
 		if(lmtkn == 24) {
 			line ++;
