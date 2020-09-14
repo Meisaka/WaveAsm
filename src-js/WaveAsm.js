@@ -1,6 +1,22 @@
+"use strict";
 function WaveA_Op(opc, mod, fmt, e) {
 	this.op = opc;
-	this.param = mod;
+	if(typeof(mod) == 'string') {
+		var sc = mod.indexOf(',');
+		if(sc == -1) {
+			this.param = parseInt(mod);
+			this.madj = 'n'.repeat(mod);
+		} else {
+			this.param = parseInt(mod.slice(0,sc));
+			mod = mod.slice(sc+1);
+			if(mod == '') mod = 'n';
+			if(mod.length < this.param) mod = mod.repeat(Math.ceil(this.param / mod.length));
+			this.madj = mod;
+		}
+	} else {
+		this.param = mod;
+		this.madj = 'n'.repeat(mod);
+	}
 	this.fmt = fmt;
 	this.enc = e;
 }
@@ -15,15 +31,60 @@ function WaveA_Lit(rl, rh, n, e) {
 	this.name = n;
 	this.enc = e;
 }
-function WaveA_Token(v,t) {
+function WaveA_Token(v,t,eb) {
 	this.token = v;
 	this.type = t;
-	this.createSpan = function(z) {
-		var r = '<span class="'+t+'">';
-		if(this.value !== undefined) { r += this.value.replace(/ /g,"&nbsp;"); }
-		if(z !== undefined) { r += z; }
-		return r+'</span>';
+	if(eb == undefined) {
+		this.exprbreak = true;
+	} else {
+		this.exprbreak = eb;
 	}
+}
+WaveA_Token.prototype.createSpan = function(z) {
+	var r = '<span class="'+this.type+'">';
+	if(this.value !== undefined) { r += this.value.replace(/ /g,"&nbsp;"); }
+	if(z !== undefined) { r += z; }
+	return r+'</span>';
+}
+
+class WaveA_EvalError extends Error {
+	constructor() {
+		super('WaveAsm_EvalError');
+	}
+}
+function WaveA_Eval(f, prio) {
+	switch(f) {
+	case '+':
+		this.fn = function(s) {
+			var a,b;
+			a = s.pop();
+			b = s.pop();
+			if(a === undefined || b === undefined)
+				throw new WaveA_EvalError;
+			s.push(a + b);
+		};
+		break;
+	case '-':
+		this.fn = function(s) {
+			var a,b;
+			a = s.pop();
+			b = s.pop();
+			if(a === undefined)
+				throw new WaveA_EvalError;
+			if(b === undefined) {
+				s.push(-a);
+			} else if(typeof(b) != 'number') {
+				s.push(b);
+				s.push(-a);
+			} else {
+				s.push(b - a);
+			}
+		};
+		break;
+	default:
+		this.fn = f;
+	}
+	this.prio = prio;
 }
 var WaveAsm = {
 init : function() {
@@ -36,27 +97,27 @@ init : function() {
 WV_EOL : new WaveA_Token(1,"EOL"),
 WV_LABEL : new WaveA_Token(2,"LABEL"),
 WV_OPC : new WaveA_Token(3,"OPC"),
-WV_IDENT : new WaveA_Token(4,"IDENT"),
-WV_NUMDEC : new WaveA_Token(5,"CONST DEC"),
-WV_NUMHEX : new WaveA_Token(6,"CONST HEX"),
-WV_NUMOCT : new WaveA_Token(7,"CONST OCT"),
-WV_NUMBIN : new WaveA_Token(8,"CONST BIN"),
+WV_IDENT : new WaveA_Token(4,"IDENT", false),
+WV_NUMDEC : new WaveA_Token(5,"CONST DEC", false),
+WV_NUMHEX : new WaveA_Token(6,"CONST HEX", false),
+WV_NUMOCT : new WaveA_Token(7,"CONST OCT", false),
+WV_NUMBIN : new WaveA_Token(8,"CONST BIN", false),
 WV_REG : new WaveA_Token(9,"REG"),
-WV_NUMCHR : new WaveA_Token(10,"CONST CHAR"),
+WV_NUMCHR : new WaveA_Token(10,"CONST CHAR", false),
 WV_STRING : new WaveA_Token(11,"STRING"),
 WV_MACRO : new WaveA_Token(12,"MACRO"),
-WV_PLUS : new WaveA_Token(13,"PUCT PLUS"),
-WV_MINUS : new WaveA_Token(14,"PUCT MINUS"),
-WV_STAR : new WaveA_Token(15,"PUCT STAR"),
+WV_PLUS : new WaveA_Token(13,"PUCT PLUS", false),
+WV_MINUS : new WaveA_Token(14,"PUCT MINUS", false),
+WV_STAR : new WaveA_Token(15,"PUCT STAR", false),
 WV_INS : new WaveA_Token(16,"PUCT INS"),
 WV_INE : new WaveA_Token(17,"PUCT INE"),
 WV_PNS : new WaveA_Token(18,"PUCT PNS"),
 WV_PNE : new WaveA_Token(19,"PUCT PNE"),
 WV_COMMA : new WaveA_Token(20,"PUCT COMMA"),
-WV_WS : new WaveA_Token(21,""),
+WV_WS : new WaveA_Token(21,"WS", false),
 WV_IMM : new WaveA_Token(22,"IMM"),
 WV_CMNT : new WaveA_Token(23,"CM"),
-WV_SL : new WaveA_Token(24,"SLF"),
+WV_SL : new WaveA_Token(24,"SLF", false),
 WV_BSL : new WaveA_Token(25,"SLB"),
 makeToken : function(t,v) {
 	var f = Object.create(t);
@@ -208,7 +269,7 @@ ScanLit : function(v) {
 		var lr = [];
 		for(i in this.littable) {
 			lt = this.littable[i];
-			if(lt.rl == "*") {
+			if(v == "*" || lt.rl == "*") {
 				lr.push(lt);
 			} else if(v != "*" && v >= lt.rl && v <= lt.rh) {
 				lr.push(lt);
@@ -303,7 +364,7 @@ LineScan : function(lt, ids) {
 						break;
 					case '#':
 						pr.push(tkn = this.makeToken(this.WV_IMM));
-						test += tkn.createSpan("IMM ");
+						test += tkn.createSpan("#");
 						break;
 					case '*':
 						pr.push(this.makeToken(this.WV_STAR));
@@ -315,13 +376,13 @@ LineScan : function(lt, ids) {
 						pr.push(this.makeToken(this.WV_BSL));
 						break;
 					case '$':
-						test += "VEC ";
+						test += "$";
 						break;
 					case '&':
-						test += "AMP ";
+						test += "&amp;";
 						break;
 					case '!':
-						test += "BANG ";
+						test += "!";
 						break;
 					case '[':
 						pr.push(tkn = this.makeToken(this.WV_INS));
@@ -538,7 +599,7 @@ LineScan : function(lt, ids) {
 			i++;
 			if(i > lt.length) {
 				pr.push(this.makeToken(this.WV_EOL));
-				test += "EOL\n";
+				//test += "EOL\n";
 				break;
 			}
 		}
@@ -550,19 +611,25 @@ Encode : function(et, beta, betv) {
 		var rec = false;
 		var bin = "";
 		var h = "", pf = [], sf = [];
-		var pws = "0000";
 		var hextobin = function(h) {
 			var m = parseInt(h,16).toString(2);
-			while(m.length < 4) {
-				m = "0" + m;
-			}
+			m = "0".repeat((4 - m.length % 4) % 4) + m;
 			return m;
 		};
+		function OTADirect(v) { bin += v; }
+		function OTASuffix(v) { sf.push( v ); ota = OTADirect; }
+		function BinWrite(v, constrain) {
+			if(constrain && otlen > 0) {
+				if(v.length < otlen) v = "0".repeat((otlen-v.length % otlen) % otlen) + v;
+				if(v.length > otlen) v = v.slice(v.length - otlen);
+			}
+			ota(v);
+		}
 		var na = [];
 		for(x in et) {
 			cek = et[x];
 			otlen = 0;
-			ota = false;
+			ota = OTADirect;
 		for(i in cek) {
 			cet = cek[i];
 			if(psk) { psk = false; continue; }
@@ -587,29 +654,22 @@ Encode : function(et, beta, betv) {
 				switch(cet.value) {
 				case "L":
 					otlen = nval;
-					while(pws.length < otlen) { pws += "0"; }
 					psk = true;
 					break;
 				case "AL":
 					otlen = nval;
-					while(pws.length < otlen) { pws += "0"; }
-					ota = true;
+					ota = OTASuffix;
 					psk = true;
 				default:
 					break;
 				}
 				break;
 			case this.WV_STAR.token:
+				if(otlen > 0 && betv < 0) {
+					betv = 2**otlen + betv;
+				}
 				wtf = betv.toString(2);
-				if(otlen > 0 && wtf.length < otlen) {
-					wtf = pws.substr(0,otlen-wtf.length) + wtf;
-				}
-				if(ota) {
-					sf.push( wtf );
-					ota = false;
-				} else {
-					bin += wtf;
-				}
+				BinWrite(wtf, true);
 				break;
 			case this.WV_NUMDEC.token:
 				if(rec) {
@@ -621,10 +681,7 @@ Encode : function(et, beta, betv) {
 					pf = pf.concat(wtf.pfx);
 				} else {
 					wtf = parseInt(cet.value,10).toString(2);
-					if(otlen > 0 && wtf.length < otlen) {
-						wtf = pws.substr(0,otlen-wtf.length) + wtf;
-					}
-					bin += wtf;
+					BinWrite(wtf, true);
 				}
 				break;
 			case this.WV_NUMHEX.token:
@@ -668,6 +725,8 @@ Assemble : function(sc) {
 		var cll = "";
 		var cllp = 0;
 		var clec = 0;
+		var cpul = parseInt(this.cputable["CPUM"]);
+		var curopc = undefined;
 		function lname(a,c) {
 			if(c >= a.length) { c = a.length - 1; }
 			return a[c];
@@ -682,12 +741,23 @@ Assemble : function(sc) {
 			}
 			return false;
 		}
+		function padBin(b, p) {
+			return '0'.repeat((p - b.length % p) % p) + b
+		}
+		function binToHex(b) {
+			return padBin(b, 4).replace(/[01]{4}/g,function(bs){
+				return parseInt(bs,2).toString(16);
+				//return "0".repeat((2 - m.length % 2) % 2) + m;
+			});
+		}
 		function OpNext(opt) {
 			var q;
 			q = otr;
 			while(q < opt.length) {
 				if(opt[q].op == cop) {
-					return otr = q;
+					otr = q;
+					curopc = opt[otr];
+					return otr;
 				} else {
 					q++;
 				}
@@ -696,44 +766,25 @@ Assemble : function(sc) {
 		}
 		for(i in lines) {
 			ltk = this.LineScan(lines[i]);
-			vps = 0;
-			cp += "<div>" + ltk.html + "</div>";
-			cq = "|";
-			ltr = 0;
-			otr = -1;
-			mtr = 0;
-			mose = 0;
-			clec = 0;
-			cll = "";
-			cllp = 0;
-			while(ltr <= mtr) {
-			if(clec > 0) {
-				break;
-			}
-			fmt = "";
-			exps.length = 0;
+			var linenum = parseInt(i) + 1;
+			cp = ltk.html;
+			cq = "";
 			for(x in ltk.tokens) {
 				ctk = ltk.tokens[x];
 				switch(ctk.token) {
-				case this.WV_OPC.token:
-					cop = ctk.value.toUpperCase();
-					if(otr < 0) { otr = 0; }
-					OpNext(this.optable);
-					break;
-				case this.WV_MACRO.token:
+					case this.WV_MACRO.token:
 					otr = -2;
 					break;
 				case this.WV_LABEL.token:
 					rtm = scanIdent1(ctk.value);
-					cll = ctk.value;
 					if(rtm) {
-						if(i+1 != rtm.l) {
-						cq += "--ERROR LABEL DUP ("+i+1 +","+ rtm.l+")--";
+						if(linenum != rtm.l) {
+						cq += "--ERROR LABEL DUP ("+linenum +","+ rtm.l+")--";
 						clec += 1;
 						nval = rtm.v;
 						}
 					} else {
-						symtable.push({n:ctk.value,v:"*",l:i+1});
+						symtable.push({n:ctk.value,v:"*",l:linenum});
 						nval = "*";
 					}
 					break;
@@ -750,7 +801,6 @@ Assemble : function(sc) {
 				case this.WV_NUMBIN.token:
 				case this.WV_NUMOCT.token:
 				case this.WV_NUMCHR.token:
-					if(otr == -1) { mose = 1; }
 					switch(ctk.token) {
 					case this.WV_NUMHEX.token:
 						nval = parseInt(ctk.value,16); break;
@@ -793,124 +843,112 @@ Assemble : function(sc) {
 					} else {
 						exps.push(ctk);
 					}
-					if(rtm) {
-						fmt += lname(rtm, ltr).name;
-						if(mtr < rtm.length) { mtr = rtm.length; }
-					}
-					break;
-				case this.WV_REG.token:
-					if(otr == -1) { mose = 1; }
-					rtm = this.CheckReg(ctk.value);
-					fmt += rtm.name;
-					break;
-				case this.WV_PLUS.token:
-					if(otr == -1) { mose = 1; }
-					fmt += "+";
-					break;
-				case this.WV_MINUS.token:
-					if(otr == -1) { mose = 1; }
-					exps.push(ctk);
-					break;
-				case this.WV_COMMA.token:
-					if(otr == -1) { mose = 1; }
-					fmt += ",";
-					break;
-				case this.WV_INS.token:
-					if(otr == -1) { mose = 1; }
-					fmt += "[";
-					break;
-				case this.WV_INE.token:
-					if(otr == -1) { mose = 1; }
-					fmt += "]";
-					break;
-				case this.WV_PNS.token:
-					if(otr == -1) { mose = 1; }
-					fmt += "(";
-					break;
-				case this.WV_PNE.token:
-					if(otr == -1) { mose = 1; }
-					fmt += ")";
 					break;
 				}
 			}
-			if(otr > -1) {
-			if(fmt == this.optable[otr].fmt) {
-				cq += "-" + ltr + "-OK-";
-				etk = this.Encode(this.optable[otr].enc,[],[]);
-				cq += etk.pfx + etk.bin + " " + etk.suf;
-				break;
-			} else if(otr == -2) {
-				cq += "-M N/I-";
-			} else {
-				if(ltr == mtr) {
-					otr++;
-					OpNext(this.optable);
-					if(otr < this.optable.length) {
-						ltr = 0;
-						continue;
-					} else {
-						cq += "--OP ERROR--";
-						clec += 1;
-						break;
-					}
-				}
-			}
-			} else if(mose == 1) {
-				cq += '--ERROR NO SUCH OP "'+cll+'"--'
-				clec += 1;
-			}
-			ltr++;
-			}
-			linetable.push({n:i+1, t:ltk.tokens, ec:clec, a:vpc, l:vps, x:cq});
-			vpc += vps;
+			linetable.push({n:linenum, t:ltk.tokens, ec:0, a:0, l:0, o:'', x:cq, xt:cp});
 		}
+		cp = undefined;
 		//
 		fagn = true;
 		for(pass = 1; (pass < 7) && fagn; pass++) {
 		fagn = false;
 		vpc = 0;
+		var linelabels = [];
 		for(i in linetable) {
-			ltk = linetable[i].t;
+			var curline = linetable[i];
+			var linenum = parseInt(i) + 1;
+			curopc = undefined;
+			cop = undefined;
+			var clmacro = undefined;
+			ltk = curline.t;
 			vps = 0;
 			cq = "|";
-			ltr = 0;
 			otr = -1;
-			mtr = 0;
 			clec = 0;
-			if(linetable[i].ec > 0) {
+			if(curline.ec > 0) {
 				continue;
 			}
-ventest:	while(ltr <= mtr) {
-			fmt = "";
+			fmt = [];
 			exps.length = 0;
 			efmt.length = 0; efvl.length = 0;
-			for(x in ltk) {
+ventest:	for(x in ltk) {
 				ctk = ltk[x];
+				if(ctk.exprbreak && exps.length > 0) {
+					nval = 0;
+					var exprop = undefined;
+					var exprstack = [];
+					var exprcmd = [];
+					for(var k in exps) {
+						if(typeof(exps[k]) == 'number') {
+							exprstack.push(exps[k]);
+							if(exprcmd.length > 0) {
+								exprstack.push(exprcmd.pop());
+							}
+						} else {
+							switch(exps[k].token) {
+							case this.WV_MINUS.token:
+								exprcmd.push(new WaveA_Eval('-'));
+								break;
+							case this.WV_PLUS.token:
+								exprcmd.push(new WaveA_Eval('+'));
+								break;
+							case this.WV_STAR.token:
+								exprcmd.push(new WaveA_Eval('*'));
+								break;
+							}
+						}
+					}
+					var evallist = exprstack;
+					exprstack = [];
+					while(evallist.length > 0) {
+						var e = evallist.shift();
+						if(e instanceof WaveA_Eval) {
+							e.fn(exprstack);
+						} else {
+							exprstack.push(e);
+						}
+					}
+					if(exprstack.length != 1 || exprcmd.length > 0) {
+						cq += "--EXPR ERROR--";
+					}
+					nval = exprstack.pop();
+					fmt.push(new WaveA_Eval('u', efvl.length));
+					efvl.push(nval);
+					exps.length = 0;
+				}
 				switch(ctk.token) {
+				case this.WV_MACRO.token:
+					clmacro = ctk.value;
+					otr = -2;
+					break;
 				case this.WV_OPC.token:
+					// resolve labels here and now
+					for(var k in linelabels) {
+						linelabels[k].v = vpc;
+						cq += "LL:"+linelabels[k].v.toString(16)+"\\";
+					}
+					linelabels.length = 0;
+
 					cop = ctk.value.toUpperCase();
 					if(otr < 0) { otr = 0; }
 					OpNext(this.optable);
 					break;
 				case this.WV_LABEL.token:
-					rtm = scanIdent1(ctk.value);
-					if(rtm) {
-						rtm.v = vpc;
-						cq += "L:"+rtm.v.toString(16);
-					}
+					var linelabel = scanIdent1(ctk.value);
+					if(linelabel) linelabels.push(linelabel);
 					break;
 				case this.WV_IDENT.token:
 					rtm = scanIdent1(ctk.value);
 					if(rtm) {
 						nval = rtm.v;
 					} else {
-						if(ctk.value.search(/^[0-9A-Fa-f]\+h$/) > -1) {
+						if(ctk.value.search(/^[0-9A-Fa-f]+h$/) > -1) {
 							cq += "-AHC-";
 							nval = parseInt(ctk.value.substr(0,ctk.value.length-1),16);
 						} else {
 							cq += "--ERROR NO IDENT--";
 							clec += 1;
-							mtr = 0;
 							break ventest;
 						}
 					}
@@ -950,102 +988,292 @@ ventest:	while(ltr <= mtr) {
 						}
 						break;
 					}
-					rtm = false;
-					if(exps.length == 0) {
-						//fmt += ctk.value.toString(10);
-						rtm = this.ScanLit(nval);
-					} else if(exps.length == 1 && exps[0].token == this.WV_MINUS.token){
+					if(exps.length == 1 && exps[0].token == this.WV_MINUS.token){
 						nval = -nval;
 						exps.pop();
-						//fmt += ctk.value.toString(10);
-						rtm = this.ScanLit(nval);
+						exps.push(nval);
 					} else {
-						exps.push(ctk);
-					}
-					if(rtm) {
-						fmt += lname(rtm, ltr).name;
-						efmt.push(lname(rtm, ltr).enc); efvl.push(nval);
-						if(mtr < rtm.length) { mtr = rtm.length; }
+						if(nval == '*') nval = 0;
+						exps.push(nval);
 					}
 					break;
 				case this.WV_REG.token:
 					rtm = this.CheckReg(ctk.value);
-					fmt += rtm.name;
-					efmt.push(rtm.enc); efvl.push(0);
+					fmt.push(rtm);
+					efvl.push(0);
 					break;
 				case this.WV_PLUS.token:
-					fmt += "+";
+					exps.push(ctk);
 					break;
 				case this.WV_MINUS.token:
 					exps.push(ctk);
 					break;
+				case this.WV_IMM.token:
+					fmt.push("#");
+					break;
 				case this.WV_COMMA.token:
-					fmt += ",";
+					fmt.push(",");
 					break;
 				case this.WV_INS.token:
-					fmt += "[";
+					fmt.push("[");
 					break;
 				case this.WV_INE.token:
-					fmt += "]";
+					fmt.push("]");
 					break;
 				case this.WV_PNS.token:
-					fmt += "(";
+					fmt.push("(");
 					break;
 				case this.WV_PNE.token:
-					fmt += ")";
+					fmt.push(")");
+					break;
+				case this.WV_WS.token:
+				case this.WV_EOL.token:
+				case this.WV_CMNT.token:
+					break;
+				default:
+					fmt.push("?");
 					break;
 				}
 			}
+			var shex = '';
+			var testfmt = '';
+			var curfmt = '';
 			if(otr > -1) {
-			if(fmt == this.optable[otr].fmt) {
-				cq += "-" + ltr + "-OK-";
-				etk = this.Encode(this.optable[otr].enc,efmt,efvl);
-				cq += etk.pfx.join("") + etk.bin + " " + etk.suf.join("");
-				vps = (etk.pfx.join("").length + etk.bin.length + etk.suf.join("").length);
-				cq += "{" +etk.pfx.join("").length;
-				cq += "," +etk.bin.length;
-				cq += "," +etk.suf.join("").length + "}";
-				vps /= parseInt(this.cputable["CPUM"]);
-				break;
-			} else {
-				if(ltr == mtr) {
-					otr++;
-					OpNext(this.optable);
-					if(otr < this.optable.length) {
-						ltr = 0;
+				mtr = fmt.length;
+				var efvlindex = 0;
+				var fmtindex = new Array(mtr).fill(0);
+				ltr = 0;
+				while(ltr <= mtr) {
+					if(ltr < mtr) {
+						var cfmt = fmt[ltr];
+						var vfmtlen = 0;
+						if(typeof(cfmt) == 'string') {
+							curfmt += cfmt;
+							ltr++;
+							continue;
+						} else if(cfmt instanceof Array) {
+							if(cfmt.length == 0) {
+								if(pass > 1) cq += "--SYN ERROR--";
+								break;
+							}
+							testfmt = cfmt[fmtindex[ltr]].name;
+							vfmtlen = cfmt.length;
+						} else if(cfmt instanceof WaveA_Eval) {
+							if(fmtindex[ltr] == 0) {
+								efvlindex = cfmt.prio;
+								if(curopc.madj[efvlindex] == 'r') {
+									cfmt.v = efvl[efvlindex] - (vpc + curline.l);
+								} else {
+									cfmt.v = efvl[efvlindex];
+								}
+								rtm = this.ScanLit(cfmt.v);
+								if(rtm) {
+									if(rtm.length == 0) {
+										if(pass > 1) {
+											cq += "--RANGE ERROR--";
+										}
+										ltr++;
+										continue;
+									}
+									cfmt.a = rtm;
+								} else {
+									cq += "--VALUE ERROR--";
+								}
+							}
+							testfmt = cfmt.a[fmtindex[ltr]].name;
+							vfmtlen = cfmt.a.length;
+						} else {
+							testfmt = cfmt.name;
+						}
+					}
+					if(curfmt + testfmt == curopc.fmt && ltr+1 >= mtr) {
+						efmt.length = 0;
+						if(cq.includes('ERROR')) {
+							cq = cq.replace('ERROR', 'WARN');
+						}
+						for(i in fmt) {
+							if(fmt[i] instanceof Array) {
+								efmt.push(fmt[i][fmtindex[i]].enc);
+							} else if(fmt[i] instanceof WaveA_Eval) {
+								efmt.push(fmt[i].a[fmtindex[i]].enc);
+							} else if(typeof(fmt[i]) == 'object') {
+								efmt.push(fmt[i].enc);
+							}
+						}
+						for(i in fmt) {
+							if(fmt[i] instanceof WaveA_Eval) {
+								efvlindex = fmt[i].prio;
+								efvl[efvlindex] = fmt[i].v;
+							}
+						}
+						etk = this.Encode(curopc.enc,efmt,efvl);
+						shex = etk.pfx.join("") + etk.bin + etk.suf.join("");
+						vps = Math.ceil(shex.length / cpul);
+						shex = binToHex(padBin(shex, cpul));
+						cq += shex;
+						break;
+					} else if(ltr < mtr && curopc.fmt.startsWith(curfmt + testfmt)) {
+						curfmt += testfmt;
+						testfmt = '';
+					} else if(ltr < mtr && fmtindex[ltr] + 1 < vfmtlen && !curopc.fmt.startsWith(curfmt + testfmt)) {
+						fmtindex[ltr]++;
 						continue;
 					} else {
-						cq += "--OP ERROR--"+ fmt;
-						clec += 1;
-						break;
+						if(ltr == mtr) {
+							fmtindex.fill(0);
+							curfmt = '';
+							otr++;
+							OpNext(this.optable);
+							if(otr < this.optable.length) {
+								ltr = 0;
+								continue;
+							} else {
+								if(pass > 1) cq += "--OP PARAM ERROR--" + curfmt + testfmt;
+								clec += 1;
+								break;
+							}
+						}
+					}
+					ltr++;
+				}
+			} else if(otr == -2) {
+				function resolveLabels() {
+					for(var k in linelabels) {
+						linelabels[k].v = vpc;
+						cq += "MLL:"+linelabels[k].v.toString(16)+"\\";
+					}
+					linelabels.length = 0;
+				}
+				function MacroArgError(n) {
+					if(n === undefined) {
+						this.message = "__MACRO ARG ERROR__";
+					} else {
+						this.message = "__MACRO ARG ERROR:"+n+"__"
 					}
 				}
+				function macroMinArg(n) {
+					if(efvl.length < n) {
+						throw new MacroArgError();
+					}
+				}
+				function macroNumArg(n) {
+					if(efvl.length != n) {
+						throw new MacroArgError("expects "+n+" got "+efvl.length);
+					}
+				}
+				try {
+					switch(clmacro.toUpperCase()) {
+					case ".ORG":
+						macroNumArg(1);
+						vpc = efvl[0];
+						break;
+					case ".EQU":
+						macroNumArg(1);
+						for(var k in linelabels) {
+							linelabels[k].v = efvl[0];
+							cq += "EQU:"+linelabels[k].v.toString(16)+"\\";
+						}
+						linelabels.length = 0;
+						break;
+					case ".RESB":
+						resolveLabels();
+						macroMinArg(1);
+						if(efvl[0] < 0) { cq += "--MACRO ERROR--"; break; }
+						nval = 0;
+						if(efvl.length > 1) nval = efvl[1];
+						shex = padBin(nval.toString(2), cpul);
+						shex = binToHex(shex.repeat(efvl[0]));
+						vps = Math.ceil((shex.length * 4) / cpul);
+						break;
+					case ".DB":
+						resolveLabels();
+						macroMinArg(1);
+						shex = ''
+						for(var k in efvl) {
+							nval = efvl[k];
+							var tmphex = binToHex(padBin(nval.toString(2), cpul));
+							vps += Math.ceil((tmphex.length * 4) / cpul);
+							shex += tmphex;
+						}
+						break;
+					case ".DW":
+						resolveLabels();
+						macroMinArg(1);
+						shex = ''
+						for(var k in efvl) {
+							nval = efvl[k];
+							var tmphex = binToHex(padBin(nval.toString(2), cpul*2));
+							vps += Math.ceil((tmphex.length * 4) / cpul);
+							shex += tmphex;
+						}
+						break;
+					}
+				} catch(e) {
+					cq += e.message;
+				}
 			}
+			if(curline.a != vpc) {
+				curline.a = vpc;
+				fagn = true;
 			}
-			ltr++;
-			}
-			linetable[i].a = vps;
+			curline.o = shex;
 			vpc += vps;
-			if(linetable[i].l != vps) {
-				linetable[i].l = vps;
+			if(curline.l != vps) {
+				curline.l = vps;
 				fagn = true;
 			}
 			if((otr > -1) && (otr < this.optable.length)) {
-				cq += " " + otr + ":" + this.optable[otr].op + " " + this.optable[otr].fmt + "=" + fmt;
+				cq += " :" + curopc.op + " " + curopc.fmt + "=" + curfmt+testfmt;
 			}
-			//linetable.push({n:i+1, t:ltk.tokens, a:vpc, l:vps});
-			linetable[i].x += cq;
+			curline.x = cq;
 		}
 		}
 		//
 		cq = "";
+		var rpro = [];
+		var eline = {a:0, v:''};
+		function genResultLine() {
+			eline.sa = binToHex(padBin(eline.a.toString(2), 16));
+			var chk = 0;
+			var elt = (eline.sa + eline.v);
+			var ell = binToHex(padBin(((elt.length >> 1) + 1).toString(2), 8));
+			(ell + elt).match(/[0-9A-Fa-f]{2}/g).forEach(function(v){
+				chk += parseInt(v, 16);
+			});
+			chk = (chk & 0xff) ^ 0xff;
+			eline.slen = ell;
+			eline.chk = chk;
+			eline.schk = binToHex(padBin(chk.toString(2), 8));
+			rpro.push(eline);
+			eline = {a:0, v:''};
+		}
+		vpc = undefined;
 		for(i in linetable) {
+			var cline = linetable[i];
+			if(vpc === undefined) {
+				vpc = cline.a;
+			}
+			if(cline.a != vpc) {
+				genResultLine();
+				vpc = cline.a;
+			}
+			if(eline.v.length == 0) {
+				eline.a = cline.a;
+			}
+			vpc += cline.o.length >> 1;
+			eline.v += cline.o;
+			if(eline.v.length >= 48) {
+				genResultLine();
+			}
 			cq += "<div";
-			if(linetable[i].x.search(/ERR/) > -1) {
+			if(cline.x.search(/ERR/) > -1) {
 				cq += " class=\"ERR\"";
 			}
-			cq += ">" + linetable[i].x + "</div>";
+			cq += "><span class=\"INSTR\">" + cline.xt +"</span><span class=\"asmsg\">"+ cline.x + "</span></div>";
 		}
-		return {html:cp, bhtml:cq };
+		if(eline.v.length > 0) {
+			genResultLine();
+		}
+		return {html:cq, program:rpro };
 	}
 };
